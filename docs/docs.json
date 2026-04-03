@@ -36,12 +36,8 @@
         "href": "https://www.worldmonitor.app"
       },
       {
-        "label": "Pro",
-        "href": "https://www.worldmonitor.app/pro"
-      },
-      {
-        "label": "GitHub",
-        "href": "https://github.com/koala73/worldmonitor"
+        "label": "Dashboard",
+        "href": "/"
       }
     ],
     "primary": {
