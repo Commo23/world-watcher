@@ -1105,7 +1105,7 @@ export class DataLoaderManager implements AppModule {
 
     this.ctx.allNews = collectedNews;
     this.ctx.initialLoadComplete = true;
-    mountCommunityWidget();
+    
 
     this.ctx.map?.updateHotspotActivity(this.ctx.allNews);
 
