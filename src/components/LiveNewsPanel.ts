@@ -1148,7 +1148,7 @@ export class LiveNewsPanel extends Panel {
     if (quality !== 'auto') params.set('vq', quality);
     // origin = canonical site origin YouTube trusts for embed restrictions.
     // parentOrigin = actual parent frame origin so postMessage round-trips work.
-    params.set('origin', this.youtubeOrigin || 'https://worldmonitor.app');
+    params.set('origin', this.youtubeOrigin || 'https://world-watcher.vercel.app');
     params.set('parentOrigin', window.location.origin);
     const embedUrl = `http://localhost:${getLocalApiPort()}/api/youtube-embed?${params.toString()}`;
 

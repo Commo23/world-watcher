@@ -101,11 +101,11 @@ export function getWidget(id: string): CustomWidgetSpec | null {
 // (worldmonitor.app, tech., finance., commodity., happy., etc.).
 // We read cookie first and fall back to localStorage for migration compat.
 
-const COOKIE_DOMAIN = '.worldmonitor.app';
+const COOKIE_DOMAIN = '.vercel.app';
 const KEY_MAX_AGE = 365 * 24 * 60 * 60;
 
 function usesCookies(): boolean {
-  return location.hostname.endsWith('worldmonitor.app');
+  return location.hostname.endsWith('vercel.app') || location.hostname.endsWith('worldmonitor.app');
 }
 
 function getCookieValue(name: string): string {
