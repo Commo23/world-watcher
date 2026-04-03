@@ -36,6 +36,13 @@ export function rssProxyUrl(feedUrl: string): string {
   if (RSS_PROXY_BASE) {
     return `${RSS_PROXY_BASE}/rss?url=${encodeURIComponent(feedUrl)}`;
   }
+  // When running on a recognized web host (e.g. lovable.app preview) that has a
+  // configured API base URL, use it so the RSS proxy resolves to the Vercel
+  // endpoint instead of a relative path that doesn't exist on the preview server.
+  const webApiBase = getConfiguredWebApiBaseUrl();
+  if (webApiBase) {
+    return `${webApiBase}/api/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
+  }
   return `/api/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
 }
 
