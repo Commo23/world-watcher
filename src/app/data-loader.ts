@@ -306,6 +306,9 @@ export class DataLoaderManager implements AppModule {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json() as ListFeedDigestResponse;
       const catCount = Object.keys(data.categories ?? {}).length;
+      if (catCount === 0) {
+        throw new Error('Digest returned no categories');
+      }
       console.info(`[News] Digest fetched: ${catCount} categories`);
       this.lastGoodDigest = data;
       this.persistDigest(data);
@@ -341,6 +344,14 @@ export class DataLoaderManager implements AppModule {
     // Enable per-feed RSS fallback so missing categories fetch directly.
     if (isDesktopRuntime()) return true;
     return isFeatureEnabled('newsPerFeedFallback');
+  }
+
+  private shouldUseEmergencyPerFeedFallback(
+    digest: ListFeedDigestResponse | null | undefined,
+    category: string,
+  ): boolean {
+    if (this.isPerFeedFallbackEnabled()) return false;
+    return !digest?.categories || !(category in digest.categories);
   }
 
   private getStaleNewsItems(category: string): NewsItem[] {
@@ -901,7 +912,8 @@ export class DataLoaderManager implements AppModule {
         return staleItems;
       }
 
-      if (!this.isPerFeedFallbackEnabled()) {
+      const isEmergencyFallback = this.shouldUseEmergencyPerFeedFallback(digest, category);
+      if (!this.isPerFeedFallbackEnabled() && !isEmergencyFallback) {
         console.warn(`[News] Digest missing for "${category}", limited per-feed fallback disabled`);
         this.renderNewsForCategory(category, []);
         this.ctx.statusPanel?.updateFeed(category.charAt(0).toUpperCase() + category.slice(1), {
@@ -912,7 +924,9 @@ export class DataLoaderManager implements AppModule {
       }
 
       const fallbackFeeds = this.selectLimitedFeeds(enabledFeeds, this.perFeedFallbackCategoryFeedLimit);
-      if (fallbackFeeds.length < enabledFeeds.length) {
+      if (isEmergencyFallback) {
+        console.warn(`[News] Digest missing for "${category}", using emergency per-feed fallback (${fallbackFeeds.length}/${enabledFeeds.length} feeds)`);
+      } else if (fallbackFeeds.length < enabledFeeds.length) {
         console.warn(`[News] Digest missing for "${category}", using limited per-feed fallback (${fallbackFeeds.length}/${enabledFeeds.length} feeds)`);
       } else {
         console.warn(`[News] Digest missing for "${category}", using per-feed fallback (${fallbackFeeds.length} feeds)`);
@@ -1052,13 +1066,15 @@ export class DataLoaderManager implements AppModule {
           }
           this.ctx.statusPanel?.updateFeed('Intel', { status: 'ok', itemCount: staleIntel.length });
           collectedNews.push(...staleIntel);
-        } else if (!this.isPerFeedFallbackEnabled()) {
+        } else if (!this.isPerFeedFallbackEnabled() && !this.shouldUseEmergencyPerFeedFallback(digest, 'intel')) {
           console.warn('[News] Intel digest missing, limited per-feed fallback disabled');
           delete this.ctx.newsByCategory['intel'];
           this.ctx.statusPanel?.updateFeed('Intel', { status: 'error', errorMessage: 'Digest unavailable' });
         } else {
           const fallbackIntelFeeds = this.selectLimitedFeeds(enabledIntelSources, this.perFeedFallbackIntelFeedLimit);
-          if (fallbackIntelFeeds.length < enabledIntelSources.length) {
+          if (this.shouldUseEmergencyPerFeedFallback(digest, 'intel')) {
+            console.warn(`[News] Intel digest missing, using emergency per-feed fallback (${fallbackIntelFeeds.length}/${enabledIntelSources.length} feeds)`);
+          } else if (fallbackIntelFeeds.length < enabledIntelSources.length) {
             console.warn(`[News] Intel digest missing, using limited per-feed fallback (${fallbackIntelFeeds.length}/${enabledIntelSources.length} feeds)`);
           }
 
