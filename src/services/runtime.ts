@@ -126,7 +126,8 @@ function isWorldMonitorWebHost(hostname: string): boolean {
     || hostname.endsWith('.worldmonitor.app')
     || hostname === 'world-watcher.vercel.app'
     || hostname.endsWith('.world-watcher.vercel.app')
-    || hostname.endsWith('.lovable.app');
+    || hostname.endsWith('.lovable.app')
+    || hostname.endsWith('.lovableproject.com');
 }
 
 export function getConfiguredWebApiBaseUrl(): string {
