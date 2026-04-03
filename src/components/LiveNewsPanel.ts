@@ -513,7 +513,7 @@ export class LiveNewsPanel extends Panel {
 
   private get embedOrigin(): string {
     if (isDesktopRuntime()) return `http://localhost:${getLocalApiPort()}`;
-    try { return new URL(getRemoteApiBaseUrl()).origin; } catch { return 'https://worldmonitor.app'; }
+    try { return new URL(getRemoteApiBaseUrl()).origin; } catch { return 'https://world-watcher.vercel.app'; }
   }
 
   private setupBridgeMessageListener(): void {
