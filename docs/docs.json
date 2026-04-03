@@ -36,12 +36,8 @@
         "href": "https://www.worldmonitor.app"
       },
       {
-        "label": "Pro",
-        "href": "https://www.worldmonitor.app/pro"
-      },
-      {
-        "label": "GitHub",
-        "href": "https://github.com/koala73/worldmonitor"
+        "label": "Dashboard",
+        "href": "/"
       }
     ],
     "primary": {
@@ -263,47 +259,13 @@
     ]
   },
   "footer": {
-    "socials": {
-      "github": "https://github.com/koala73/worldmonitor",
-      "discord": "https://discord.gg/re63kWKxaz",
-      "x": "https://x.com/worldmonitorai"
-    },
     "links": [
       {
-        "header": "World Monitor",
+        "header": "CommoHedge Monitor",
         "items": [
           {
             "label": "Dashboard",
-            "href": "https://www.worldmonitor.app"
-          },
-          {
-            "label": "Pro",
-            "href": "https://www.worldmonitor.app/pro"
-          },
-          {
-            "label": "Blog",
-            "href": "https://www.worldmonitor.app/blog"
-          }
-        ]
-      },
-      {
-        "header": "Community",
-        "items": [
-          {
-            "label": "GitHub",
-            "href": "https://github.com/koala73/worldmonitor"
-          },
-          {
-            "label": "Discord",
-            "href": "https://discord.gg/re63kWKxaz"
-          },
-          {
-            "label": "X",
-            "href": "https://x.com/worldmonitorai"
-          },
-          {
-            "label": "Status",
-            "href": "https://status.worldmonitor.app/"
+            "href": "/"
           }
         ]
       }
