@@ -12136,10 +12136,6 @@ a.prediction-link:hover {
     display: none !important;
   }
 
-  /* Mobile: hide community discussion widget (accessible via settings) */
-  .community-widget {
-    display: none !important;
-  }
 
   .focus-label {
     display: none;
