@@ -216,6 +216,7 @@ const APP_HOSTS = new Set([
   'www.worldmonitor.app',
   'tech.worldmonitor.app',
   'api.worldmonitor.app',
+  'world-watcher.vercel.app',
   'localhost',
   '127.0.0.1',
   ...extractHostnames(WS_API_URL, ENV.VITE_WS_RELAY_URL),
