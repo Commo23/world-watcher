@@ -92,7 +92,7 @@ export class App {
 
   private modules: { destroy(): void }[] = [];
   private unsubAiFlow: (() => void) | null = null;
-  private unsubFreeTier: (() => void) | null = null;
+  
   private visiblePanelPrimed = new Set<string>();
   private visiblePanelPrimeRaf: number | null = null;
   private bootstrapHydrationState: BootstrapHydrationState = getBootstrapHydrationState();
