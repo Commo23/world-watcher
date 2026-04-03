@@ -10,7 +10,7 @@ const ENV = (() => {
 })();
 
 const WS_API_URL = ENV.VITE_WS_API_URL || '';
-const DEFAULT_WEB_API_URL = 'https://api.worldmonitor.app';
+const DEFAULT_WEB_API_URL = 'https://world-watcher.vercel.app';
 const KEYED_CLOUD_API_PATTERN = /^\/api\/(?:[^/]+\/v1\/|bootstrap(?:\?|$)|polymarket(?:\?|$)|ais-snapshot(?:\?|$))/;
 
 const DEFAULT_REMOTE_HOSTS: Record<string, string> = {
@@ -123,7 +123,10 @@ export function getApiBaseUrl(): string {
 function isWorldMonitorWebHost(hostname: string): boolean {
   return hostname === 'worldmonitor.app'
     || hostname === 'www.worldmonitor.app'
-    || hostname.endsWith('.worldmonitor.app');
+    || hostname.endsWith('.worldmonitor.app')
+    || hostname === 'world-watcher.vercel.app'
+    || hostname.endsWith('.world-watcher.vercel.app')
+    || hostname.endsWith('.lovable.app');
 }
 
 export function getConfiguredWebApiBaseUrl(): string {
@@ -166,7 +169,7 @@ export function getRemoteApiBaseUrl(): string {
   if (fromHosts) return fromHosts;
 
   // Desktop builds may not set VITE_WS_API_URL; default to production.
-  if (isDesktopRuntime()) return 'https://worldmonitor.app';
+  if (isDesktopRuntime()) return 'https://world-watcher.vercel.app';
   return '';
 }
 
@@ -214,6 +217,7 @@ const APP_HOSTS = new Set([
   'www.worldmonitor.app',
   'tech.worldmonitor.app',
   'api.worldmonitor.app',
+  'world-watcher.vercel.app',
   'localhost',
   '127.0.0.1',
   ...extractHostnames(WS_API_URL, ENV.VITE_WS_RELAY_URL),
@@ -223,7 +227,7 @@ function isAppOriginUrl(urlStr: string): boolean {
   try {
     const u = new URL(urlStr);
     const host = u.hostname;
-    return APP_HOSTS.has(host) || host.endsWith('.worldmonitor.app');
+    return APP_HOSTS.has(host) || host.endsWith('.worldmonitor.app') || host.endsWith('.vercel.app');
   } catch {
     return false;
   }
