@@ -1,4 +1,4 @@
-import { isDesktopRuntime, toApiUrl, toRuntimeUrl } from '../services/runtime';
+import { isDesktopRuntime, toApiUrl, toRuntimeUrl, getConfiguredWebApiBaseUrl } from '../services/runtime';
 import { getPersistentCache, setPersistentCache } from '../services/persistent-cache';
 
 const isDev = import.meta.env.DEV;
