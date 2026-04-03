@@ -1,14 +1,35 @@
 #!/bin/bash
 # Vercel Ignored Build Step: exit 0 = skip, exit 1 = build
-# Only build when web-relevant files change. Skip desktop, docs, scripts, CI, etc.
+# Only build when web-relevant files change. Skip desktop, docs, and other non-web files.
+# Deployment-control files are treated as web-relevant so redeploy fixes are never skipped.
 
-# On main: skip if ONLY scripts/, docs/, .github/, or non-web files changed
+WEB_RELEVANT_PATHS=(
+  'src/'
+  'api/'
+  'server/'
+  'shared/'
+  'public/'
+  'blog-site/'
+  'pro-test/'
+  'proto/'
+  'convex/'
+  'tests/'
+  '.github/workflows/'
+  'scripts/vercel-ignore.sh'
+  '.vercelignore'
+  'package.json'
+  'package-lock.json'
+  'vite.config.ts'
+  'tsconfig.json'
+  'tsconfig.api.json'
+  'vercel.json'
+  'middleware.ts'
+)
+
+# On main: skip only when none of the web-relevant or deployment-control files changed.
 if [ "$VERCEL_GIT_COMMIT_REF" = "main" ] && [ -n "$VERCEL_GIT_PREVIOUS_SHA" ]; then
   git cat-file -e "$VERCEL_GIT_PREVIOUS_SHA" 2>/dev/null && {
-    WEB_CHANGES=$(git diff --name-only "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- \
-      'src/' 'api/' 'server/' 'shared/' 'public/' 'blog-site/' 'pro-test/' 'proto/' 'convex/' \
-      'package.json' 'package-lock.json' 'vite.config.ts' 'tsconfig.json' \
-      'tsconfig.api.json' 'vercel.json' 'middleware.ts' | head -1)
+    WEB_CHANGES=$(git diff --name-only "$VERCEL_GIT_PREVIOUS_SHA" HEAD -- "${WEB_RELEVANT_PATHS[@]}" | head -1)
     [ -z "$WEB_CHANGES" ] && echo "Skipping: no web-relevant changes on main" && exit 0
   }
   exit 1
@@ -26,24 +47,7 @@ fi
 [ -z "$COMPARE_SHA" ] && exit 1
 
 # Build if any of these web-relevant paths changed
-git diff --name-only "$COMPARE_SHA" HEAD -- \
-  'src/' \
-  'api/' \
-  'server/' \
-  'shared/' \
-  'public/' \
-  'blog-site/' \
-  'pro-test/' \
-  'proto/' \
-  'convex/' \
-  'package.json' \
-  'package-lock.json' \
-  'vite.config.ts' \
-  'tsconfig.json' \
-  'tsconfig.api.json' \
-  'vercel.json' \
-  'middleware.ts' \
-  | grep -q . && exit 1
+git diff --name-only "$COMPARE_SHA" HEAD -- "${WEB_RELEVANT_PATHS[@]}" | grep -q . && exit 1
 
 # Nothing web-relevant changed, skip the build
 exit 0
