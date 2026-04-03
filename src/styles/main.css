@@ -2616,9 +2616,6 @@ body.live-news-fullscreen-active #mapSection.live-news-fullscreen .map-container
   min-height: 0 !important;
 }
 
-body.live-news-fullscreen-active .community-widget {
-  display: none;
-}
 
 /* Hide map overlays and sibling panels behind fullscreen panel (#829, #859) */
 body.live-news-fullscreen-active .layer-toggles,
@@ -12139,10 +12136,6 @@ a.prediction-link:hover {
     display: none !important;
   }
 
-  /* Mobile: hide community discussion widget (accessible via settings) */
-  .community-widget {
-    display: none !important;
-  }
 
   .focus-label {
     display: none;
@@ -15389,108 +15382,6 @@ a.prediction-link:hover {
   border-color: rgba(68, 255, 136, 0.2);
 }
 
-/* Pro early-access banner */
-.pro-banner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 7px 36px 7px 16px;
-  background: linear-gradient(90deg, rgba(74, 222, 128, 0.06), rgba(74, 222, 128, 0.12), rgba(74, 222, 128, 0.06));
-  border-bottom: 1px solid rgba(74, 222, 128, 0.15);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--text-dim);
-  position: relative;
-  transform: translateY(-100%);
-  opacity: 0;
-  transition: transform 0.3s ease-out, opacity 0.3s ease-out;
-}
-
-.pro-banner.pro-banner-in {
-  transform: translateY(0);
-  opacity: 1;
-}
-
-.pro-banner.pro-banner-out {
-  transform: translateY(-100%);
-  opacity: 0;
-}
-
-.pro-banner-badge {
-  padding: 2px 8px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--green);
-  background: rgba(74, 222, 128, 0.1);
-  border: 1px solid rgba(74, 222, 128, 0.2);
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.pro-banner-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pro-banner-text strong {
-  color: var(--text);
-}
-
-.pro-banner-cta {
-  padding: 4px 14px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: #0a0a0a;
-  background: var(--green);
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.2s, transform 0.2s;
-}
-
-.pro-banner-cta:hover {
-  background: #5eead4;
-  transform: translateY(-1px);
-}
-
-.pro-banner-close {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  padding: 4px;
-}
-
-.pro-banner-close:hover {
-  color: var(--text);
-}
-
-@media (max-width: 768px) {
-  .pro-banner {
-    font-size: 11px;
-    gap: 8px;
-    padding: 6px 32px 6px 10px;
-    flex-wrap: wrap;
-  }
-
-  .pro-banner-text {
-    white-space: normal;
-    flex: 1 1 0;
-    min-width: 0;
-  }
-}
 
 /* Layer performance warning dialog */
 .layer-warn-overlay {
@@ -19330,139 +19221,6 @@ body.has-breaking-alert .panels-grid {
   }
 }
 
-/* ============================================================
-   Community Discussion Widget — Floating Pill
-   ============================================================ */
-.community-widget {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9000;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  animation: cw-float-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.community-widget.cw-hiding {
-  animation: cw-float-out 0.3s ease-in forwards;
-}
-
-@keyframes cw-float-in {
-  0% {
-    transform: translateY(10px) scale(0.95);
-    opacity: 0;
-  }
-
-  100% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-}
-
-@keyframes cw-float-out {
-  0% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateY(10px) scale(0.95);
-    opacity: 0;
-  }
-}
-
-.cw-pill {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--panel-bg, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 28px;
-  padding: 8px 8px 8px 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-}
-
-.cw-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: hsl(229, 48%, 55%);
-  flex-shrink: 0;
-  animation: cw-dot-pulse 2s ease-in-out infinite;
-}
-
-@keyframes cw-dot-pulse {
-
-  0%,
-  100% {
-    opacity: 1;
-    box-shadow: 0 0 0 0 hsla(229, 48%, 55%, 0.4);
-  }
-
-  50% {
-    opacity: 0.6;
-    box-shadow: 0 0 8px 2px hsla(229, 48%, 55%, 0.3);
-  }
-}
-
-.cw-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text, #e8e8e8);
-  white-space: nowrap;
-}
-
-.cw-cta {
-  padding: 6px 14px;
-  background: hsl(229, 48%, 55%);
-  border: none;
-  border-radius: 20px;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background 0.2s;
-}
-
-.cw-cta:hover {
-  background: hsl(229, 48%, 62%);
-}
-
-.cw-close {
-  background: none;
-  border: none;
-  color: var(--text-ghost, #444);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  line-height: 1;
-  transition: color 0.15s, background 0.15s;
-}
-
-.cw-close:hover {
-  color: var(--text-dim, #888);
-  background: var(--overlay-light, rgba(255, 255, 255, 0.05));
-}
-
-.cw-dismiss {
-  font-size: 10px;
-  color: var(--text-ghost, #444);
-  cursor: pointer;
-  background: none;
-  border: none;
-  padding: 0 8px;
-  transition: color 0.2s;
-}
-
-.cw-dismiss:hover {
-  color: var(--text-dim, #888);
-}
 
 /* ── Ultra-wide layout: map left, panels beside it ── */
 @media (min-width: 1600px) {
