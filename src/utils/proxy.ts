@@ -18,7 +18,7 @@ const RSS_PROXY_BASE = isDev
 //   desktop   → relay directly (sidecar buffers arrayBuffer() which destroys SSE streaming)
 //   prod web  → /api/widget-agent (Vercel edge) → validates Clerk JWT or tester keys
 //               then proxies SSE to relay with real server-side keys
-const WIDGET_RELAY_BASE = 'https://proxy.worldmonitor.app';
+const WIDGET_RELAY_BASE = 'https://world-watcher.vercel.app';
 export function widgetAgentUrl(): string {
   if (isDev) return '/widget-agent';
   if (isDesktopRuntime()) return `${WIDGET_RELAY_BASE}/widget-agent`;

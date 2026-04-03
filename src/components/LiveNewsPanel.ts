@@ -550,9 +550,7 @@ export class LiveNewsPanel extends Panel {
   }
 
   private static resolveYouTubeOrigin(): string | null {
-    const fallbackOrigin = SITE_VARIANT === 'tech'
-      ? 'https://worldmonitor.app'
-      : 'https://worldmonitor.app';
+    const fallbackOrigin = 'https://world-watcher.vercel.app';
 
     try {
       const { protocol, origin, host } = window.location;
