@@ -402,21 +402,14 @@ export class PanelLayoutManager implements AppModule {
         <div class="site-footer-brand">
           <img src="/favico/favicon-32x32.png" alt="" width="28" height="28" class="site-footer-icon" />
           <div class="site-footer-brand-text">
-            <span class="site-footer-name">WORLD MONITOR</span>
-            <span class="site-footer-sub">v${__APP_VERSION__} &middot; <a href="https://x.com/eliehabib" target="_blank" rel="noopener" class="site-footer-credit">@eliehabib</a></span>
+            <span class="site-footer-name">COMMOHEDGE MONITOR</span>
+            <span class="site-footer-sub">v${__APP_VERSION__}</span>
           </div>
         </div>
         <nav>
-          <a href="${this.ctx.isDesktopApp ? 'https://worldmonitor.app/pro' : 'https://www.worldmonitor.app/pro'}" target="_blank" rel="noopener">Pro</a>
-          <a href="${this.ctx.isDesktopApp ? 'https://worldmonitor.app/blog/' : 'https://www.worldmonitor.app/blog/'}" target="_blank" rel="noopener">Blog</a>
-          <a href="${this.ctx.isDesktopApp ? 'https://worldmonitor.app/docs' : 'https://www.worldmonitor.app/docs'}" target="_blank" rel="noopener">Docs</a>
-          <a href="https://status.worldmonitor.app/" target="_blank" rel="noopener">Status</a>
-          <a href="https://github.com/koala73/worldmonitor" target="_blank" rel="noopener">GitHub</a>
-          <a href="https://discord.gg/re63kWKxaz" target="_blank" rel="noopener">Discord</a>
-          <a href="https://x.com/worldmonitorai" target="_blank" rel="noopener">X</a>
           ${this.ctx.isDesktopApp ? '' : `<span id="footerDownloadMount"></span>`}
         </nav>
-        <span class="site-footer-copy">&copy; ${new Date().getFullYear()} World Monitor</span>
+        <span class="site-footer-copy">&copy; ${new Date().getFullYear()} CommoHedge Monitor</span>
       </footer>
     `;
 

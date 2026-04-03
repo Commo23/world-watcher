@@ -10,7 +10,7 @@ import { escapeHtml } from '@/utils/sanitize';
 import { trackLanguageChange } from '@/services/analytics';
 import { exportSettings, importSettings, type ImportResult } from '@/utils/settings-persistence';
 
-const DESKTOP_RELEASES_URL = 'https://github.com/koala73/worldmonitor/releases';
+const DESKTOP_RELEASES_URL = '#';
 
 export interface PreferencesHost {
   isDesktopApp: boolean;
