@@ -781,8 +781,6 @@ export class App {
       await initAuthState();
       initAuthAnalytics();
     }
-    this.enforceFreeTierLimits();
-    this.unsubFreeTier = subscribeAuthState(() => { this.enforceFreeTierLimits(); });
 
 
     const geoCoordsPromise: Promise<PreciseCoordinates | null> =
