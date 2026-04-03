@@ -226,7 +226,7 @@ function isAppOriginUrl(urlStr: string): boolean {
   try {
     const u = new URL(urlStr);
     const host = u.hostname;
-    return APP_HOSTS.has(host) || host.endsWith('.worldmonitor.app');
+    return APP_HOSTS.has(host) || host.endsWith('.worldmonitor.app') || host.endsWith('.vercel.app');
   } catch {
     return false;
   }
