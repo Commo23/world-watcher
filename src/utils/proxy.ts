@@ -1,4 +1,4 @@
-import { isDesktopRuntime, toApiUrl, toRuntimeUrl } from '../services/runtime';
+import { isDesktopRuntime, toApiUrl, toRuntimeUrl, getConfiguredWebApiBaseUrl } from '../services/runtime';
 import { getPersistentCache, setPersistentCache } from '../services/persistent-cache';
 
 const isDev = import.meta.env.DEV;
@@ -35,6 +35,13 @@ export function rssProxyUrl(feedUrl: string): string {
   if (isDesktopRuntime()) return proxyUrl(feedUrl);
   if (RSS_PROXY_BASE) {
     return `${RSS_PROXY_BASE}/rss?url=${encodeURIComponent(feedUrl)}`;
+  }
+  // When running on a recognized web host (e.g. lovable.app preview) that has a
+  // configured API base URL, use it so the RSS proxy resolves to the Vercel
+  // endpoint instead of a relative path that doesn't exist on the preview server.
+  const webApiBase = getConfiguredWebApiBaseUrl();
+  if (webApiBase) {
+    return `${webApiBase}/api/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
   }
   return `/api/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
 }

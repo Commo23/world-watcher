@@ -1,6 +1,6 @@
 import type { Feed, NewsItem } from '@/types';
 import { SITE_VARIANT } from '@/config';
-import { chunkArray, fetchWithProxy } from '@/utils';
+import { chunkArray, rssProxyUrl } from '@/utils';
 import { classifyByKeyword, classifyWithAI } from './threat-classifier';
 import { inferGeoHubsFromTitle } from './geo-hub-index';
 import { getPersistentCache, setPersistentCache } from './persistent-cache';
@@ -221,7 +221,10 @@ export async function fetchFeed(feed: Feed): Promise<NewsItem[]> {
 
     if (!url) throw new Error(`No URL found for feed ${feed.name}`);
 
-    const response = await fetchWithProxy(url);
+    // Use RSS proxy URL so feeds route through the Vercel endpoint
+    // instead of failing with CORS on non-Vercel hosts (e.g. Lovable preview).
+    const proxyUrl = rssProxyUrl(url);
+    const response = await fetch(proxyUrl);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     const parser = new DOMParser();
