@@ -148,7 +148,7 @@ export function openWidgetChatModal(options: WidgetChatOptions): void {
   async function runPreflight(): Promise<void> {
     setReadinessState(readinessEl, 'checking', t('widgets.checkingConnection'));
     try {
-      const headers = await buildWidgetAuthHeaders(isPro);
+      const headers = buildWidgetAuthHeaders();
       const res = await fetch(widgetAgentHealthUrl(), { headers });
       let payload: WidgetAgentHealth | null = null;
       try { payload = await res.json() as WidgetAgentHealth; } catch { /* ignore */ }
