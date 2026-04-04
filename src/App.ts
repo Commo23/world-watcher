@@ -50,7 +50,7 @@ import { trackEvent, trackDeeplinkOpened, initAuthAnalytics } from '@/services/a
 import { preloadCountryGeometry, getCountryNameByCode } from '@/services/country-geometry';
 import { initI18n, t } from '@/services/i18n';
 
-import { computeDefaultDisabledSources, getLocaleBoostedSources, getTotalFeedCount } from '@/config/feeds';
+import { computeDefaultDisabledSources, getAllDefaultEnabledSources, getLocaleBoostedSources, getTotalFeedCount } from '@/config/feeds';
 import { fetchBootstrapData, getBootstrapHydrationState, markBootstrapAsLive, type BootstrapHydrationState } from '@/services/bootstrap';
 import { describeFreshness } from '@/services/persistent-cache';
 import { DesktopUpdater } from '@/app/desktop-updater';
@@ -581,7 +581,10 @@ export class App {
     }
     // One-time migration: reduce default-enabled sources (full variant only)
     if (currentVariant === 'full') {
+      const userLang = ((navigator.language ?? 'en').split('-')[0] ?? 'en').toLowerCase();
       const baseKey = 'worldmonitor-sources-reduction-v3';
+      const localeKey = `worldmonitor-locale-boost-${userLang}`;
+
       if (!localStorage.getItem(baseKey)) {
         const defaultDisabled = computeDefaultDisabledSources();
         saveToStorage(STORAGE_KEYS.disabledFeeds, defaultDisabled);
@@ -589,9 +592,7 @@ export class App {
         const total = getTotalFeedCount();
         console.log(`[App] Sources reduction: ${defaultDisabled.length} disabled, ${total - defaultDisabled.length} enabled`);
       }
-      // Locale boost: additively enable locale-matched sources (runs once per locale)
-      const userLang = ((navigator.language ?? 'en').split('-')[0] ?? 'en').toLowerCase();
-      const localeKey = `worldmonitor-locale-boost-${userLang}`;
+
       if (userLang !== 'en' && !localStorage.getItem(localeKey)) {
         const boosted = getLocaleBoostedSources(userLang);
         if (boosted.size > 0) {
@@ -601,6 +602,28 @@ export class App {
           console.log(`[App] Locale boost (${userLang}): enabled ${current.length - updated.length} sources`);
         }
         localStorage.setItem(localeKey, 'done');
+      }
+
+      const storedDisabled = loadFromStorage<string[]>(STORAGE_KEYS.disabledFeeds, []);
+      const storedDisabledSet = new Set(storedDisabled);
+      const defaultEnabled = getAllDefaultEnabledSources();
+      if (userLang !== 'en') {
+        for (const name of getLocaleBoostedSources(userLang)) defaultEnabled.add(name);
+      }
+
+      const totalFeeds = getTotalFeedCount();
+      const disabledRecommendedCount = [...defaultEnabled]
+        .reduce((count, name) => count + Number(storedDisabledSet.has(name)), 0);
+      const allRecommendedSourcesDisabled = defaultEnabled.size > 0
+        && disabledRecommendedCount >= Math.max(defaultEnabled.size - 2, 1);
+      const almostEverythingDisabled = storedDisabled.length >= Math.max(totalFeeds - 3, 1);
+
+      if (allRecommendedSourcesDisabled || almostEverythingDisabled) {
+        const repairedDisabled = computeDefaultDisabledSources(userLang);
+        saveToStorage(STORAGE_KEYS.disabledFeeds, repairedDisabled);
+        console.warn(
+          `[App] Repaired disabled feed state: ${storedDisabled.length} disabled -> ${repairedDisabled.length} disabled`,
+        );
       }
     }
 
