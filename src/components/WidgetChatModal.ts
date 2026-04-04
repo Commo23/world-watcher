@@ -1,6 +1,4 @@
 import type { CustomWidgetSpec } from '@/services/widget-store';
-import { getBrowserTesterKey, getWidgetAgentKey, getProWidgetKey } from '@/services/widget-store';
-import { getClerkToken } from '@/services/clerk';
 import { t } from '@/services/i18n';
 import { escapeHtml } from '@/utils/sanitize';
 import { widgetAgentHealthUrl, widgetAgentUrl } from '@/utils/proxy';
@@ -42,21 +40,16 @@ let overlay: HTMLElement | null = null;
 let abortController: AbortController | null = null;
 let clientTimeout: ReturnType<typeof setTimeout> | null = null;
 
-async function buildWidgetAuthHeaders(isPro: boolean): Promise<Record<string, string>> {
-  const testerKey = getBrowserTesterKey();
-  const widgetKey = getWidgetAgentKey();
-  const proKey = getProWidgetKey();
-  if (testerKey || widgetKey || proKey) {
-    const headers: Record<string, string> = {};
-    if (testerKey) headers['X-WorldMonitor-Key'] = testerKey;
-    if (widgetKey) headers['X-Widget-Key'] = widgetKey;
-    if (isPro && proKey) headers['X-Pro-Key'] = proKey;
-    return headers;
+function buildWidgetAuthHeaders(): Record<string, string> {
+  // Auth is handled server-side by the Supabase edge function
+  // Only pass the anon key for Supabase function invocation
+  const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '') as string;
+  if (anonKey) {
+    return { 'apikey': anonKey, 'Authorization': `Bearer ${anonKey}` };
   }
-  const token = await getClerkToken();
-  if (token) return { 'Authorization': `Bearer ${token}` };
   return {};
 }
+
 
 export function openWidgetChatModal(options: WidgetChatOptions): void {
   closeWidgetChatModal();
@@ -155,7 +148,7 @@ export function openWidgetChatModal(options: WidgetChatOptions): void {
   async function runPreflight(): Promise<void> {
     setReadinessState(readinessEl, 'checking', t('widgets.checkingConnection'));
     try {
-      const headers = await buildWidgetAuthHeaders(isPro);
+      const headers = buildWidgetAuthHeaders();
       const res = await fetch(widgetAgentHealthUrl(), { headers });
       let payload: WidgetAgentHealth | null = null;
       try { payload = await res.json() as WidgetAgentHealth; } catch { /* ignore */ }
@@ -238,7 +231,7 @@ export function openWidgetChatModal(options: WidgetChatOptions): void {
     try {
       const reqHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
-        ...(await buildWidgetAuthHeaders(isPro)),
+        ...buildWidgetAuthHeaders(),
       };
 
       const res = await fetch(widgetAgentUrl(), {

@@ -1,49 +1,24 @@
-import { isDesktopRuntime, toApiUrl, toRuntimeUrl, getConfiguredWebApiBaseUrl } from '../services/runtime';
+import { isDesktopRuntime, toApiUrl, toRuntimeUrl } from '../services/runtime';
 import { getPersistentCache, setPersistentCache } from '../services/persistent-cache';
 
 const isDev = import.meta.env.DEV;
 const RESPONSE_CACHE_PREFIX = 'api-response:';
 
-// RSS proxy: route directly to Railway relay via Cloudflare CDN when enabled.
-// Feature flag controls rollout; default off for safe staged deployment.
-const RSS_DIRECT_TO_RELAY = import.meta.env.VITE_RSS_DIRECT_TO_RELAY === 'true';
-const RSS_PROXY_BASE = isDev
-  ? '' // Dev uses Vite's rssProxyPlugin
-  : RSS_DIRECT_TO_RELAY
-    ? 'https://world-watcher.vercel.app'
-    : '';
+// Supabase edge function base URL for RSS and Widget Agent
+const SUPABASE_FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1`;
 
-// Widget agent proxy:
-//   dev       → Vite proxy /widget-agent → relay
-//   desktop   → relay directly (sidecar buffers arrayBuffer() which destroys SSE streaming)
-//   prod web  → /api/widget-agent (Vercel edge) → validates Clerk JWT or tester keys
-//               then proxies SSE to relay with real server-side keys
-const WIDGET_RELAY_BASE = 'https://world-watcher.vercel.app';
+// Widget agent: Supabase edge function
 export function widgetAgentUrl(): string {
-  if (isDev) return '/widget-agent';
-  if (isDesktopRuntime()) return `${WIDGET_RELAY_BASE}/widget-agent`;
-  return '/api/widget-agent';
+  return `${SUPABASE_FUNCTIONS_URL}/widget-agent`;
 }
 
 export function widgetAgentHealthUrl(): string {
-  if (isDev) return '/widget-agent/health';
-  if (isDesktopRuntime()) return `${WIDGET_RELAY_BASE}/widget-agent/health`;
-  return '/api/widget-agent'; // Vercel handler: GET → relay /widget-agent/health
+  return `${SUPABASE_FUNCTIONS_URL}/widget-agent`;
 }
 
+// RSS proxy: Supabase edge function
 export function rssProxyUrl(feedUrl: string): string {
-  if (isDesktopRuntime()) return proxyUrl(feedUrl);
-  if (RSS_PROXY_BASE) {
-    return `${RSS_PROXY_BASE}/rss?url=${encodeURIComponent(feedUrl)}`;
-  }
-  // When running on a recognized web host (e.g. lovable.app preview) that has a
-  // configured API base URL, use it so the RSS proxy resolves to the Vercel
-  // endpoint instead of a relative path that doesn't exist on the preview server.
-  const webApiBase = getConfiguredWebApiBaseUrl();
-  if (webApiBase) {
-    return `${webApiBase}/api/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
-  }
-  return `/api/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
+  return `${SUPABASE_FUNCTIONS_URL}/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
 }
 
 type CachedResponsePayload = {

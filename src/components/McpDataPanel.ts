@@ -4,7 +4,7 @@ import { t } from '@/services/i18n';
 import { h } from '@/utils/dom-utils';
 import { proxyUrl, widgetAgentUrl } from '@/utils/proxy';
 import { escapeHtml } from '@/utils/sanitize';
-import { isProWidgetEnabled, getBrowserTesterKey, getWidgetAgentKey, getProWidgetKey } from '@/services/widget-store';
+import { isProWidgetEnabled } from '@/services/widget-store';
 import { wrapProWidgetHtml } from '@/utils/widget-sanitizer';
 
 type McpResult = {
@@ -175,13 +175,12 @@ export class McpDataPanel extends Panel {
     const timeoutId = setTimeout(() => timeoutController.abort(), 120_000);
 
     try {
-      const testerKey = getBrowserTesterKey();
-      const widgetKey = getWidgetAgentKey();
-      const proKey = getProWidgetKey();
+      const anonKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? '') as string;
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (widgetKey) headers['X-Widget-Key'] = widgetKey;
-      if (proKey) headers['X-Pro-Key'] = proKey;
-      if (testerKey) headers['X-WorldMonitor-Key'] = testerKey;
+      if (anonKey) {
+        headers['apikey'] = anonKey;
+        headers['Authorization'] = `Bearer ${anonKey}`;
+      }
       const res = await fetch(widgetAgentUrl(), {
         method: 'POST',
         headers,
