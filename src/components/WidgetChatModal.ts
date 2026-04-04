@@ -231,7 +231,7 @@ export function openWidgetChatModal(options: WidgetChatOptions): void {
     try {
       const reqHeaders: Record<string, string> = {
         'Content-Type': 'application/json',
-        ...(await buildWidgetAuthHeaders(isPro)),
+        ...buildWidgetAuthHeaders(),
       };
 
       const res = await fetch(widgetAgentUrl(), {
