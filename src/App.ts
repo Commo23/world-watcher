@@ -52,7 +52,533 @@ import { initI18n, t } from '@/services/i18n';
 
 import { computeDefaultDisabledSources, getAllDefaultEnabledSources, getLocaleBoostedSources, getTotalFeedCount } from '@/config/feeds';
 import { fetchBootstrapData, getBootstrapHydrationState, markBootstrapAsLive, type BootstrapHydrationState } from '@/services/bootstrap';
-...
+import { describeFreshness } from '@/services/persistent-cache';
+import { DesktopUpdater } from '@/app/desktop-updater';
+import { CountryIntelManager } from '@/app/country-intel';
+import { SearchManager } from '@/app/search-manager';
+import { RefreshScheduler } from '@/app/refresh-scheduler';
+import { PanelLayoutManager } from '@/app/panel-layout';
+import { DataLoaderManager } from '@/app/data-loader';
+import { EventHandlerManager } from '@/app/event-handlers';
+import { resolveUserRegion, resolvePreciseUserCoordinates, type PreciseCoordinates } from '@/utils/user-location';
+
+import { initAuthState } from '@/services/auth-state';
+import {
+  CorrelationEngine,
+  militaryAdapter,
+  escalationAdapter,
+  economicAdapter,
+  disasterAdapter,
+} from '@/services/correlation-engine';
+import type { CorrelationPanel } from '@/components/CorrelationPanel';
+
+const CYBER_LAYER_ENABLED = import.meta.env.VITE_ENABLE_CYBER_LAYER === 'true';
+
+export type { CountryBriefSignals } from '@/app/app-context';
+
+export class App {
+  private state: AppContext;
+  private pendingDeepLinkCountry: string | null = null;
+  private pendingDeepLinkExpanded = false;
+  private pendingDeepLinkStoryCode: string | null = null;
+
+  private panelLayout: PanelLayoutManager;
+  private dataLoader: DataLoaderManager;
+  private eventHandlers: EventHandlerManager;
+  private searchManager: SearchManager;
+  private countryIntel: CountryIntelManager;
+  private refreshScheduler: RefreshScheduler;
+  private desktopUpdater: DesktopUpdater;
+
+  private modules: { destroy(): void }[] = [];
+  private unsubAiFlow: (() => void) | null = null;
+  
+  private visiblePanelPrimed = new Set<string>();
+  private visiblePanelPrimeRaf: number | null = null;
+  private bootstrapHydrationState: BootstrapHydrationState = getBootstrapHydrationState();
+  private cachedModeBannerEl: HTMLElement | null = null;
+  private readonly handleViewportPrime = (): void => {
+    if (this.visiblePanelPrimeRaf !== null) return;
+    this.visiblePanelPrimeRaf = window.requestAnimationFrame(() => {
+      this.visiblePanelPrimeRaf = null;
+      void this.primeVisiblePanelData();
+    });
+  };
+  private readonly handleConnectivityChange = (): void => {
+    this.updateConnectivityUi();
+  };
+
+  private isPanelNearViewport(panelId: string, marginPx = 400): boolean {
+    const panel = this.state.panels[panelId] as { isNearViewport?: (marginPx?: number) => boolean } | undefined;
+    return panel?.isNearViewport?.(marginPx) ?? false;
+  }
+
+  private isAnyPanelNearViewport(panelIds: string[], marginPx = 400): boolean {
+    return panelIds.some((panelId) => this.isPanelNearViewport(panelId, marginPx));
+  }
+
+  private shouldRefreshIntelligence(): boolean {
+    return this.isAnyPanelNearViewport(['cii', 'strategic-risk', 'strategic-posture'])
+      || !!this.state.countryBriefPage?.isVisible();
+  }
+
+  private shouldRefreshFirms(): boolean {
+    return this.isPanelNearViewport('satellite-fires');
+  }
+
+  private shouldRefreshCorrelation(): boolean {
+    return this.isAnyPanelNearViewport(['military-correlation', 'escalation-correlation', 'economic-correlation', 'disaster-correlation']);
+  }
+
+  private getCachedBootstrapUpdatedAt(): number | null {
+    const cachedTierTimestamps = Object.values(this.bootstrapHydrationState.tiers)
+      .filter((tier) => tier.source === 'cached')
+      .map((tier) => tier.updatedAt)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+    if (cachedTierTimestamps.length === 0) return null;
+    return Math.min(...cachedTierTimestamps);
+  }
+
+  private updateConnectivityUi(): void {
+    const statusIndicator = this.state.container.querySelector('.status-indicator');
+    const statusLabel = statusIndicator?.querySelector('span:last-child');
+    const online = typeof navigator === 'undefined' ? true : navigator.onLine !== false;
+    // Only treat a complete cache fallback (no live data at all) as "cached" for UI purposes.
+    // 'mixed' means live data was partially fetched — showing "Live data unavailable" would be misleading.
+    const usingCachedBootstrap = this.bootstrapHydrationState.source === 'cached';
+    const cachedUpdatedAt = this.getCachedBootstrapUpdatedAt();
+
+    let statusMode: 'live' | 'cached' | 'unavailable' = 'live';
+    let bannerMessage: string | null = null;
+
+    if (!online) {
+      // Offline: show banner regardless of mixed/cached (any cached data is better than nothing)
+      const hasAnyCached = this.bootstrapHydrationState.source === 'cached' || this.bootstrapHydrationState.source === 'mixed';
+      if (hasAnyCached) {
+        statusMode = 'cached';
+        const offlineCachedAt = this.bootstrapHydrationState.tiers
+          ? Math.min(...Object.values(this.bootstrapHydrationState.tiers)
+              .filter((tier) => tier.source === 'cached' || tier.source === 'mixed')
+              .map((tier) => tier.updatedAt)
+              .filter((v): v is number => typeof v === 'number' && Number.isFinite(v)))
+          : NaN;
+        const freshness = Number.isFinite(offlineCachedAt) ? describeFreshness(offlineCachedAt) : t('common.cached').toLowerCase();
+        bannerMessage = t('connectivity.offlineCached', { freshness });
+      } else {
+        statusMode = 'unavailable';
+        bannerMessage = t('connectivity.offlineUnavailable');
+      }
+    } else if (usingCachedBootstrap) {
+      statusMode = 'cached';
+      const freshness = cachedUpdatedAt ? describeFreshness(cachedUpdatedAt) : t('common.cached').toLowerCase();
+      bannerMessage = t('connectivity.cachedFallback', { freshness });
+    }
+
+    if (statusIndicator && statusLabel) {
+      statusIndicator.classList.toggle('status-indicator--cached', statusMode === 'cached');
+      statusIndicator.classList.toggle('status-indicator--unavailable', statusMode === 'unavailable');
+      statusLabel.textContent = statusMode === 'live'
+        ? t('header.live')
+        : statusMode === 'cached'
+          ? t('header.cached')
+          : t('header.unavailable');
+    }
+
+    if (bannerMessage) {
+      if (!this.cachedModeBannerEl) {
+        this.cachedModeBannerEl = document.createElement('div');
+        this.cachedModeBannerEl.className = 'cached-mode-banner';
+        this.cachedModeBannerEl.setAttribute('role', 'status');
+        this.cachedModeBannerEl.setAttribute('aria-live', 'polite');
+
+        const badge = document.createElement('span');
+        badge.className = 'cached-mode-banner__badge';
+        const text = document.createElement('span');
+        text.className = 'cached-mode-banner__text';
+        this.cachedModeBannerEl.append(badge, text);
+
+        const header = this.state.container.querySelector('.header');
+        if (header?.parentElement) {
+          header.insertAdjacentElement('afterend', this.cachedModeBannerEl);
+        } else {
+          this.state.container.prepend(this.cachedModeBannerEl);
+        }
+      }
+
+      this.cachedModeBannerEl.classList.toggle('cached-mode-banner--unavailable', statusMode === 'unavailable');
+      const badge = this.cachedModeBannerEl.querySelector('.cached-mode-banner__badge')!;
+      const text = this.cachedModeBannerEl.querySelector('.cached-mode-banner__text')!;
+      badge.textContent = statusMode === 'cached' ? t('header.cached') : t('header.unavailable');
+      text.textContent = bannerMessage;
+      return;
+    }
+
+    this.cachedModeBannerEl?.remove();
+    this.cachedModeBannerEl = null;
+  }
+
+  private async primeVisiblePanelData(forceAll = false): Promise<void> {
+    const tasks: Promise<unknown>[] = [];
+    const primeTask = (key: string, task: () => Promise<unknown>): void => {
+      if (this.visiblePanelPrimed.has(key) || this.state.inFlight.has(key)) return;
+      const wrapped = (async () => {
+        this.state.inFlight.add(key);
+        try {
+          await task();
+          this.visiblePanelPrimed.add(key);
+        } finally {
+          this.state.inFlight.delete(key);
+        }
+      })();
+      tasks.push(wrapped);
+    };
+
+    const shouldPrime = (id: string): boolean => forceAll || this.isPanelNearViewport(id);
+    const shouldPrimeAny = (ids: string[]): boolean => forceAll || this.isAnyPanelNearViewport(ids);
+
+    if (shouldPrime('service-status')) {
+      const panel = this.state.panels['service-status'] as ServiceStatusPanel | undefined;
+      if (panel) primeTask('service-status', () => panel.fetchStatus());
+    }
+    if (shouldPrime('macro-signals')) {
+      const panel = this.state.panels['macro-signals'] as MacroSignalsPanel | undefined;
+      if (panel) primeTask('macro-signals', () => panel.fetchData());
+    }
+    if (shouldPrime('fear-greed')) {
+      const panel = this.state.panels['fear-greed'] as FearGreedPanel | undefined;
+      if (panel) primeTask('fear-greed', () => panel.fetchData());
+    }
+    if (shouldPrime('hormuz-tracker')) {
+      const panel = this.state.panels['hormuz-tracker'] as HormuzPanel | undefined;
+      if (panel) primeTask('hormuz-tracker', () => panel.fetchData());
+    }
+    if (shouldPrime('etf-flows')) {
+      const panel = this.state.panels['etf-flows'] as ETFFlowsPanel | undefined;
+      if (panel) primeTask('etf-flows', () => panel.fetchData());
+    }
+    if (shouldPrime('stablecoins')) {
+      const panel = this.state.panels.stablecoins as StablecoinPanel | undefined;
+      if (panel) primeTask('stablecoins', () => panel.fetchData());
+    }
+    if (shouldPrime('telegram-intel')) {
+      primeTask('telegram-intel', () => this.dataLoader.loadTelegramIntel());
+    }
+    if (shouldPrime('gulf-economies')) {
+      const panel = this.state.panels['gulf-economies'] as GulfEconomiesPanel | undefined;
+      if (panel) primeTask('gulf-economies', () => panel.fetchData());
+    }
+    if (shouldPrime('grocery-basket')) {
+      const panel = this.state.panels['grocery-basket'] as GroceryBasketPanel | undefined;
+      if (panel) primeTask('grocery-basket', () => panel.fetchData());
+    }
+    if (shouldPrime('bigmac')) {
+      const panel = this.state.panels['bigmac'] as BigMacPanel | undefined;
+      if (panel) primeTask('bigmac', () => panel.fetchData());
+    }
+    if (shouldPrime('fuel-prices')) {
+      const panel = this.state.panels['fuel-prices'] as FuelPricesPanel | undefined;
+      if (panel) primeTask('fuel-prices', () => panel.fetchData());
+    }
+    if (shouldPrime('consumer-prices')) {
+      const panel = this.state.panels['consumer-prices'] as ConsumerPricesPanel | undefined;
+      if (panel) primeTask('consumer-prices', () => panel.fetchData());
+    }
+    if (shouldPrime('defense-patents')) {
+      const panel = this.state.panels['defense-patents'] as DefensePatentsPanel | undefined;
+      if (panel) primeTask('defense-patents', () => { panel.refresh(); return Promise.resolve(); });
+    }
+    if (shouldPrime('macro-tiles')) {
+      const panel = this.state.panels['macro-tiles'] as MacroTilesPanel | undefined;
+      if (panel) primeTask('macro-tiles', () => panel.fetchData());
+    }
+    if (shouldPrime('fsi')) {
+      const panel = this.state.panels['fsi'] as FSIPanel | undefined;
+      if (panel) primeTask('fsi', () => panel.fetchData());
+    }
+    if (shouldPrime('yield-curve')) {
+      const panel = this.state.panels['yield-curve'] as YieldCurvePanel | undefined;
+      if (panel) primeTask('yield-curve', () => panel.fetchData());
+    }
+    if (shouldPrime('earnings-calendar')) {
+      const panel = this.state.panels['earnings-calendar'] as EarningsCalendarPanel | undefined;
+      if (panel) primeTask('earnings-calendar', () => panel.fetchData());
+    }
+    if (shouldPrime('economic-calendar')) {
+      const panel = this.state.panels['economic-calendar'] as EconomicCalendarPanel | undefined;
+      if (panel) primeTask('economic-calendar', () => panel.fetchData());
+    }
+    if (shouldPrime('cot-positioning')) {
+      const panel = this.state.panels['cot-positioning'] as CotPositioningPanel | undefined;
+      if (panel) primeTask('cot-positioning', () => panel.fetchData());
+    }
+    if (shouldPrimeAny(['markets', 'heatmap', 'commodities', 'crypto', 'energy-complex'])) {
+      primeTask('markets', () => this.dataLoader.loadMarkets());
+    }
+    if (shouldPrime('polymarket')) {
+      primeTask('predictions', () => this.dataLoader.loadPredictions());
+    }
+    if (shouldPrime('economic')) {
+      primeTask('fred', () => this.dataLoader.loadFredData());
+      primeTask('spending', () => this.dataLoader.loadGovernmentSpending());
+      primeTask('bis', () => this.dataLoader.loadBisData());
+    }
+    if (shouldPrime('energy-complex')) {
+      primeTask('oil', () => this.dataLoader.loadOilAnalytics());
+    }
+    if (shouldPrime('trade-policy')) {
+      primeTask('tradePolicy', () => this.dataLoader.loadTradePolicy());
+    }
+    if (shouldPrime('supply-chain')) {
+      primeTask('supplyChain', () => this.dataLoader.loadSupplyChain());
+    }
+    if (shouldPrime('cross-source-signals')) {
+      primeTask('crossSourceSignals', () => this.dataLoader.loadCrossSourceSignals());
+    }
+
+    const _wmAccess = getSecretState('WORLDMONITOR_API_KEY').present || getAuthState().user?.role === 'pro';
+    if (_wmAccess) {
+      if (shouldPrime('stock-analysis')) {
+        primeTask('stockAnalysis', () => this.dataLoader.loadStockAnalysis());
+      }
+      if (shouldPrime('stock-backtest')) {
+        primeTask('stockBacktest', () => this.dataLoader.loadStockBacktest());
+      }
+      if (shouldPrime('daily-market-brief')) {
+        primeTask('dailyMarketBrief', () => this.dataLoader.loadDailyMarketBrief());
+      }
+      if (shouldPrime('market-implications')) {
+        primeTask('marketImplications', () => this.dataLoader.loadMarketImplications());
+      }
+    }
+
+    if (tasks.length > 0) {
+      await Promise.allSettled(tasks);
+    }
+  }
+
+  constructor(containerId: string) {
+    const el = document.getElementById(containerId);
+    if (!el) throw new Error(`Container ${containerId} not found`);
+
+    const PANEL_ORDER_KEY = 'panel-order';
+    const PANEL_SPANS_KEY = 'worldmonitor-panel-spans';
+
+    const isMobile = isMobileDevice();
+    const isDesktopApp = isDesktopRuntime();
+    const monitors = loadFromStorage<Monitor[]>(STORAGE_KEYS.monitors, []);
+
+    // Use mobile-specific defaults on first load (no saved layers)
+    const defaultLayers = isMobile ? MOBILE_DEFAULT_MAP_LAYERS : DEFAULT_MAP_LAYERS;
+
+    let mapLayers: MapLayers;
+    let panelSettings: Record<string, PanelConfig>;
+
+    // Panels that must survive variant switches: desktop config, user-created widgets, MCP panels.
+    const isDynamicPanel = (k: string) => k === 'runtime-config' || k.startsWith('cw-') || k.startsWith('mcp-');
+
+    // Check if variant changed - reset all settings to variant defaults
+    const storedVariant = localStorage.getItem('worldmonitor-variant');
+    const currentVariant = SITE_VARIANT;
+    console.log(`[App] Variant check: stored="${storedVariant}", current="${currentVariant}"`);
+    if (storedVariant !== currentVariant) {
+      // Variant changed — seed new variant's panels, disable panels not in the new variant
+      console.log('[App] Variant changed - seeding new defaults, disabling cross-variant panels');
+      localStorage.setItem('worldmonitor-variant', currentVariant);
+      // Reset map layers for the new variant (map layers are not user-personalized the same way)
+      localStorage.removeItem(STORAGE_KEYS.mapLayers);
+      mapLayers = sanitizeLayersForVariant({ ...defaultLayers }, currentVariant as MapVariant);
+      // Load existing panel prefs (if any), disable panels not belonging to the new variant
+      panelSettings = loadFromStorage<Record<string, PanelConfig>>(STORAGE_KEYS.panels, {});
+      const newVariantKeys = new Set(VARIANT_DEFAULTS[currentVariant] ?? []);
+      for (const key of Object.keys(panelSettings)) {
+        if (!newVariantKeys.has(key) && !isDynamicPanel(key) && panelSettings[key]) {
+          panelSettings[key] = { ...panelSettings[key]!, enabled: false };
+        }
+      }
+      for (const key of newVariantKeys) {
+        if (!(key in panelSettings)) {
+          panelSettings[key] = { ...getEffectivePanelConfig(key, currentVariant), enabled: true };
+        }
+      }
+    } else {
+      mapLayers = sanitizeLayersForVariant(
+        loadFromStorage<MapLayers>(STORAGE_KEYS.mapLayers, defaultLayers),
+        currentVariant as MapVariant,
+      );
+      panelSettings = loadFromStorage<Record<string, PanelConfig>>(
+        STORAGE_KEYS.panels,
+        DEFAULT_PANELS
+      );
+
+      // One-time migration: preserve user preferences across panel key renames.
+      const PANEL_KEY_RENAMES_MIGRATION_KEY = 'worldmonitor-panel-key-renames-v2.6';
+      if (!localStorage.getItem(PANEL_KEY_RENAMES_MIGRATION_KEY)) {
+        const keyRenames: Array<[string, string]> = [
+          ['live-youtube', 'live-webcams'],
+          ['pinned-webcams', 'windy-webcams'],
+        ];
+        let migrated = false;
+        for (const [legacyKey, nextKey] of keyRenames) {
+          if (!panelSettings[legacyKey] || panelSettings[nextKey]) continue;
+          panelSettings[nextKey] = {
+            ...DEFAULT_PANELS[nextKey],
+            ...panelSettings[legacyKey],
+            name: DEFAULT_PANELS[nextKey]?.name ?? panelSettings[legacyKey].name,
+          };
+          delete panelSettings[legacyKey];
+          migrated = true;
+        }
+        if (migrated) saveToStorage(STORAGE_KEYS.panels, panelSettings);
+        localStorage.setItem(PANEL_KEY_RENAMES_MIGRATION_KEY, 'done');
+      }
+
+      // Merge in any panels from ALL_PANELS that didn't exist when settings were saved
+      for (const key of Object.keys(ALL_PANELS)) {
+        if (!(key in panelSettings)) {
+          const isDefault = (VARIANT_DEFAULTS[SITE_VARIANT] ?? []).includes(key);
+          panelSettings[key] = { ...getEffectivePanelConfig(key, SITE_VARIANT), enabled: isDefault };
+        }
+      }
+
+      // One-time migration: expose all panels to existing users (previously variant-gated)
+      const UNIFIED_MIGRATION_KEY = 'worldmonitor-unified-panels-v1';
+      if (!localStorage.getItem(UNIFIED_MIGRATION_KEY)) {
+        const variantDefaults = new Set(VARIANT_DEFAULTS[SITE_VARIANT] ?? []);
+        for (const key of Object.keys(ALL_PANELS)) {
+          if (!(key in panelSettings)) {
+            panelSettings[key] = { ...getEffectivePanelConfig(key, SITE_VARIANT), enabled: variantDefaults.has(key) };
+          }
+        }
+        saveToStorage(STORAGE_KEYS.panels, panelSettings);
+        localStorage.setItem(UNIFIED_MIGRATION_KEY, 'done');
+      }
+
+      // One-time migration: fix happy variant sessions that got cross-variant panels enabled
+      // (regression from #1911 unified panel registry which failed to disable non-variant panels on variant switch)
+      const HAPPY_PANEL_FIX_KEY = 'worldmonitor-happy-panel-fix-v1';
+      if (SITE_VARIANT === 'happy' && !localStorage.getItem(HAPPY_PANEL_FIX_KEY)) {
+        const happyKeys = new Set(VARIANT_DEFAULTS['happy'] ?? []);
+        let fixed = false;
+        for (const key of Object.keys(panelSettings)) {
+          if (!happyKeys.has(key) && !isDynamicPanel(key) && panelSettings[key]?.enabled) {
+            panelSettings[key] = { ...panelSettings[key]!, enabled: false };
+            fixed = true;
+          }
+        }
+        if (fixed) saveToStorage(STORAGE_KEYS.panels, panelSettings);
+        localStorage.setItem(HAPPY_PANEL_FIX_KEY, 'done');
+      }
+
+      console.log('[App] Loaded panel settings from storage:', Object.entries(panelSettings).filter(([_, v]) => !v.enabled).map(([k]) => k));
+
+      // One-time migration: reorder panels for existing users (v1.9 panel layout)
+      const PANEL_ORDER_MIGRATION_KEY = 'worldmonitor-panel-order-v1.9';
+      if (!localStorage.getItem(PANEL_ORDER_MIGRATION_KEY)) {
+        const savedOrder = localStorage.getItem(PANEL_ORDER_KEY);
+        if (savedOrder) {
+          try {
+            const order: string[] = JSON.parse(savedOrder);
+            const priorityPanels = ['insights', 'strategic-posture', 'cii', 'strategic-risk'];
+            const filtered = order.filter(k => !priorityPanels.includes(k) && k !== 'live-news');
+            const liveNewsIdx = order.indexOf('live-news');
+            const newOrder = liveNewsIdx !== -1 ? ['live-news'] : [];
+            newOrder.push(...priorityPanels.filter(p => order.includes(p)));
+            newOrder.push(...filtered);
+            localStorage.setItem(PANEL_ORDER_KEY, JSON.stringify(newOrder));
+            console.log('[App] Migrated panel order to v1.9 layout');
+          } catch {
+            // Invalid saved order, will use defaults
+          }
+        }
+        localStorage.setItem(PANEL_ORDER_MIGRATION_KEY, 'done');
+      }
+
+      // Tech variant migration: move insights to top (after live-news)
+      if (currentVariant === 'tech') {
+        const TECH_INSIGHTS_MIGRATION_KEY = 'worldmonitor-tech-insights-top-v1';
+        if (!localStorage.getItem(TECH_INSIGHTS_MIGRATION_KEY)) {
+          const savedOrder = localStorage.getItem(PANEL_ORDER_KEY);
+          if (savedOrder) {
+            try {
+              const order: string[] = JSON.parse(savedOrder);
+              const filtered = order.filter(k => k !== 'insights' && k !== 'live-news');
+              const newOrder: string[] = [];
+              if (order.includes('live-news')) newOrder.push('live-news');
+              if (order.includes('insights')) newOrder.push('insights');
+              newOrder.push(...filtered);
+              localStorage.setItem(PANEL_ORDER_KEY, JSON.stringify(newOrder));
+              console.log('[App] Tech variant: Migrated insights panel to top');
+            } catch {
+              // Invalid saved order, will use defaults
+            }
+          }
+          localStorage.setItem(TECH_INSIGHTS_MIGRATION_KEY, 'done');
+        }
+      }
+    }
+
+    // One-time migration: prune removed panel keys from stored settings and order
+    const PANEL_PRUNE_KEY = 'worldmonitor-panel-prune-v1';
+    if (!localStorage.getItem(PANEL_PRUNE_KEY)) {
+      const validKeys = new Set(Object.keys(ALL_PANELS));
+      let pruned = false;
+      for (const key of Object.keys(panelSettings)) {
+        if (!validKeys.has(key) && key !== 'runtime-config') {
+          delete panelSettings[key];
+          pruned = true;
+        }
+      }
+      if (pruned) saveToStorage(STORAGE_KEYS.panels, panelSettings);
+      for (const orderKey of [PANEL_ORDER_KEY, PANEL_ORDER_KEY + '-bottom-set', PANEL_ORDER_KEY + '-bottom']) {
+        try {
+          const raw = localStorage.getItem(orderKey);
+          if (!raw) continue;
+          const arr = JSON.parse(raw);
+          if (!Array.isArray(arr)) continue;
+          const filtered = arr.filter((k: string) => validKeys.has(k));
+          if (filtered.length !== arr.length) localStorage.setItem(orderKey, JSON.stringify(filtered));
+        } catch { localStorage.removeItem(orderKey); }
+      }
+      localStorage.setItem(PANEL_PRUNE_KEY, 'done');
+    }
+
+    // One-time migration: clear stale panel ordering and sizing state
+    const LAYOUT_RESET_MIGRATION_KEY = 'worldmonitor-layout-reset-v2.5';
+    if (!localStorage.getItem(LAYOUT_RESET_MIGRATION_KEY)) {
+      const hadSavedOrder = !!localStorage.getItem(PANEL_ORDER_KEY);
+      const hadSavedSpans = !!localStorage.getItem(PANEL_SPANS_KEY);
+      if (hadSavedOrder || hadSavedSpans) {
+        localStorage.removeItem(PANEL_ORDER_KEY);
+        localStorage.removeItem(PANEL_ORDER_KEY + '-bottom');
+        localStorage.removeItem(PANEL_ORDER_KEY + '-bottom-set');
+        localStorage.removeItem(PANEL_SPANS_KEY);
+        console.log('[App] Applied layout reset migration (v2.5): cleared panel order/spans');
+      }
+      localStorage.setItem(LAYOUT_RESET_MIGRATION_KEY, 'done');
+    }
+
+    // Desktop key management panel must always remain accessible in Tauri.
+    if (isDesktopApp) {
+      if (!panelSettings['runtime-config'] || !panelSettings['runtime-config'].enabled) {
+        panelSettings['runtime-config'] = {
+          ...panelSettings['runtime-config'],
+          name: panelSettings['runtime-config']?.name ?? 'Desktop Configuration',
+          enabled: true,
+          priority: panelSettings['runtime-config']?.priority ?? 2,
+        };
+        saveToStorage(STORAGE_KEYS.panels, panelSettings);
+      }
+    }
+
+    const initialUrlState: ParsedMapUrlState | null = parseMapUrlState(window.location.search, mapLayers);
+    if (initialUrlState.layers) {
+      mapLayers = sanitizeLayersForVariant(initialUrlState.layers, currentVariant as MapVariant);
+      initialUrlState.layers = mapLayers;
+    }
+    if (!CYBER_LAYER_ENABLED) {
+      mapLayers.cyberThreats = false;
+    }
     // One-time migration: reduce default-enabled sources (full variant only)
     if (currentVariant === 'full') {
       const userLang = ((navigator.language ?? 'en').split('-')[0] ?? 'en').toLowerCase();
