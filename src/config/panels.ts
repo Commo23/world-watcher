@@ -914,8 +914,8 @@ export function getEffectivePanelConfig(key: string, variant: string): PanelConf
   return { ...base, ...override };
 }
 
-export const FREE_MAX_PANELS = 40;
-export const FREE_MAX_SOURCES = 80;
+export const FREE_MAX_PANELS = 9999;
+export const FREE_MAX_SOURCES = 9999;
 
 /**
  * Returns true if the current user is entitled to enable/view this panel.
