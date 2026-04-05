@@ -406,9 +406,9 @@ export function getAisStatus(): { connected: boolean; vessels: number; messages:
   };
 }
 
-export async function fetchAisSignals(): Promise<{ disruptions: AisDisruptionEvent[]; density: AisDensityZone[] }> {
+export async function fetchAisSignals(): Promise<{ disruptions: AisDisruptionEvent[]; density: AisDensityZone[]; vessels: SnapshotCandidateReport[] }> {
   if (!aisConfigured) {
-    return { disruptions: [], density: [] };
+    return { disruptions: [], density: [], vessels: [] };
   }
 
   startPolling();
@@ -420,5 +420,6 @@ export async function fetchAisSignals(): Promise<{ disruptions: AisDisruptionEve
   return {
     disruptions: latestDisruptions,
     density: latestDensity,
+    vessels: latestCandidateReports,
   };
 }
