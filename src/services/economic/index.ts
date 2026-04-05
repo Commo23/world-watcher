@@ -47,7 +47,9 @@ import { toApiUrl } from '@/services/runtime';
 
 // ---- Client + Circuit Breakers ----
 
-const client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: (...args) => globalThis.fetch(...args) });
+import { economicFetch } from './supabase-fetch';
+
+const client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: economicFetch });
 const WB_BREAKERS_WARN_THRESHOLD = 50;
 const wbBreakers = new Map<string, ReturnType<typeof createCircuitBreaker<ListWorldBankIndicatorsResponse>>>();
 

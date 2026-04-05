@@ -7,7 +7,8 @@ async function getEconomicClient(): Promise<EconomicServiceClient> {
   if (!_client) {
     const { EconomicServiceClient } = await import('@/generated/client/worldmonitor/economic/v1/service_client');
     const { getRpcBaseUrl } = await import('@/services/rpc-client');
-    _client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args) });
+    const { economicFetch } = await import('@/services/economic/supabase-fetch');
+    _client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: economicFetch });
   }
   return _client;
 }
