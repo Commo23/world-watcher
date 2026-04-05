@@ -1,6 +1,4 @@
 import type { AuthSession } from './auth-state';
-import { getSecretState } from './runtime-config';
-import { isProUser } from './widget-store';
 
 export enum PanelGateReason {
   NONE = 'none',           // show content (pro user, or desktop with API key, or non-premium panel)
