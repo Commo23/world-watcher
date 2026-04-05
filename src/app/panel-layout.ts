@@ -214,7 +214,8 @@ export class PanelLayoutManager implements AppModule {
           <div class="variant-switcher">${(() => {
         const hostname = location.hostname;
         const local = this.ctx.isDesktopApp || hostname === 'localhost' || hostname === '127.0.0.1'
-          || hostname.endsWith('.lovableproject.com') || hostname.endsWith('.lovable.app');
+          || hostname.endsWith('.lovableproject.com') || hostname.endsWith('.lovable.app')
+          || hostname.endsWith('.vercel.app');
         const inIframe = window.self !== window.top;
         const vHref = (v: string, prod: string) => {
           if (SITE_VARIANT === v) return '#';
