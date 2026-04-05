@@ -178,9 +178,9 @@ function parseSnapshot(data: unknown): {
 
 // ---- Supabase Edge Function URL for AIS snapshot ----
 
-const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
-const SUPABASE_AIS_SNAPSHOT_URL = SUPABASE_PROJECT_ID
-  ? `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ais-snapshot`
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_AIS_SNAPSHOT_URL = SUPABASE_URL
+  ? `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/ais-snapshot`
   : '';
 
 // ---- Hybrid Fetch Strategy ----
