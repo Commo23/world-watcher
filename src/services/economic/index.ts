@@ -45,50 +45,11 @@ import { dataFreshness } from '../data-freshness';
 import { getHydratedData } from '@/services/bootstrap';
 import { toApiUrl } from '@/services/runtime';
 
-// ---- Supabase Edge Function routing ----
-
-const SUPABASE_URL = (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_SUPABASE_URL : '') || '';
-const SUPABASE_FN_BASE = SUPABASE_URL ? `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1` : '';
-
-// Map RPC paths to Supabase edge function names
-const SUPABASE_ROUTE_MAP: Record<string, string> = {
-  '/api/economic/v1/get-fred-series-batch': 'get-fred-series-batch',
-  '/api/economic/v1/get-eu-yield-curve': 'get-eu-yield-curve',
-  '/api/economic/v1/get-eurostat-country-data': 'get-eurostat-country-data',
-};
-
-/** Fetch wrapper that routes supported economic endpoints to Supabase edge functions first. */
-function supabaseFirstFetch(...args: Parameters<typeof fetch>): ReturnType<typeof fetch> {
-  if (!SUPABASE_FN_BASE) return globalThis.fetch(...args);
-
-  const input = args[0];
-  const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
-
-  try {
-    const url = new URL(urlStr);
-    const pathname = url.pathname;
-    const fnName = SUPABASE_ROUTE_MAP[pathname];
-    if (fnName) {
-      const supabaseUrl = `${SUPABASE_FN_BASE}/${fnName}${url.search}`;
-      const init = args[1] ? { ...args[1] } : {};
-      // Ensure Accept header
-      const headers = new Headers(init.headers);
-      if (!headers.has('Accept')) headers.set('Accept', 'application/json');
-      init.headers = headers;
-      return globalThis.fetch(supabaseUrl, init).then(async (res) => {
-        if (res.ok) return res;
-        // Fall back to original URL on Supabase failure
-        return globalThis.fetch(...args);
-      }).catch(() => globalThis.fetch(...args));
-    }
-  } catch { /* URL parsing failed, fall through */ }
-
-  return globalThis.fetch(...args);
-}
-
 // ---- Client + Circuit Breakers ----
 
-const client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: supabaseFirstFetch });
+import { economicFetch } from './supabase-fetch';
+
+const client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: economicFetch });
 const WB_BREAKERS_WARN_THRESHOLD = 50;
 const wbBreakers = new Map<string, ReturnType<typeof createCircuitBreaker<ListWorldBankIndicatorsResponse>>>();
 
