@@ -222,8 +222,15 @@ async function translateAlerts(alerts: OrefAlert[]): Promise<boolean> {
   return translated;
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_OREF_URL = SUPABASE_URL
+  ? `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/oref-alerts`
+  : '';
+
 function getOrefApiUrl(endpoint?: string): string {
   const suffix = endpoint ? `?endpoint=${endpoint}` : '';
+  // Prefer Supabase edge function, fall back to Vercel
+  if (SUPABASE_OREF_URL) return `${SUPABASE_OREF_URL}${suffix}`;
   return toApiUrl(`/api/oref-alerts${suffix}`);
 }
 

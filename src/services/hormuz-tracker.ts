@@ -22,9 +22,15 @@ export interface HormuzTrackerData {
   attribution: { source: string; url: string };
 }
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_HORMUZ_URL = SUPABASE_URL
+  ? `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1/hormuz-tracker`
+  : '';
+
 export async function fetchHormuzTracker(): Promise<HormuzTrackerData | null> {
+  const url = SUPABASE_HORMUZ_URL || toApiUrl('/api/supply-chain/hormuz-tracker');
   try {
-    const resp = await fetch(toApiUrl('/api/supply-chain/hormuz-tracker'), {
+    const resp = await fetch(url, {
       signal: AbortSignal.timeout(15_000),
     });
     if (!resp.ok) return null;
