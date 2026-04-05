@@ -348,6 +348,7 @@ export class DeckGLMap {
   private iranEvents: IranEvent[] = [];
   private aisDisruptions: AisDisruptionEvent[] = [];
   private aisDensity: AisDensityZone[] = [];
+  private civilianVessels: import('@/services/maritime/index').SnapshotCandidateReport[] = [];
   private cableAdvisories: CableAdvisory[] = [];
   private repairShips: RepairShip[] = [];
   private healthByCableId: Record<string, CableHealthRecord> = {};
@@ -1497,6 +1498,11 @@ export class DeckGLMap {
       layers.push(this.createAisDisruptionsLayer());
     }
 
+    // Civilian vessels layer (individual ship positions)
+    if (mapLayers.ais && this.civilianVessels.length > 0) {
+      layers.push(this.createCivilianVesselsLayer());
+    }
+
     // GPS/GNSS jamming layer
     if (mapLayers.gpsJamming && this.gpsJammingHexes.length > 0) {
       layers.push(this.createGpsJammingLayer());
@@ -2529,6 +2535,35 @@ export class DeckGLMap {
     });
   }
 
+  private createCivilianVesselsLayer(): ScatterplotLayer {
+    return new ScatterplotLayer({
+      id: 'civilian-vessels-layer',
+      data: this.civilianVessels,
+      getPosition: (d) => [d.lon, d.lat],
+      getRadius: 4000,
+      getFillColor: (d) => {
+        const t = d.shipType ?? 0;
+        // Tanker (60-69): orange
+        if (t >= 60 && t < 70) return [255, 160, 60, 180] as [number, number, number, number];
+        // Cargo (70-79): cyan
+        if (t >= 70 && t < 80) return [60, 200, 220, 180] as [number, number, number, number];
+        // Tanker/chemical (80-89): amber
+        if (t >= 80 && t < 90) return [220, 180, 50, 180] as [number, number, number, number];
+        // Passenger (40-49): green
+        if (t >= 40 && t < 50) return [80, 220, 120, 180] as [number, number, number, number];
+        // Tug/special (50-59): purple
+        if (t >= 50 && t < 60) return [160, 100, 220, 180] as [number, number, number, number];
+        // Fishing (30): blue
+        if (t === 30) return [80, 140, 255, 180] as [number, number, number, number];
+        // Default: light gray
+        return [180, 180, 200, 140] as [number, number, number, number];
+      },
+      radiusMinPixels: 2,
+      radiusMaxPixels: 6,
+      pickable: true,
+    });
+  }
+
   private createMilitaryVesselClustersLayer(clusters: MilitaryVesselCluster[]): ScatterplotLayer {
     return new ScatterplotLayer({
       id: 'military-vessel-clusters-layer',
@@ -3535,6 +3570,12 @@ export class DeckGLMap {
         return { html: `<div class="deckgl-tooltip"><strong>M${(obj.magnitude || 0).toFixed(1)} ${t('components.deckgl.tooltip.earthquake')}</strong><br/>${text(obj.place)}</div>` };
       case 'military-vessels-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.operatorCountry)}</div>` };
+      case 'civilian-vessels-layer': {
+        const shipTypes: Record<number, string> = { 30: 'Fishing', 52: 'Tug', 60: 'Passenger', 70: 'Cargo', 71: 'Container', 72: 'Bulk', 80: 'Tanker', 84: 'LNG' };
+        const typeLabel = shipTypes[obj.shipType] || (obj.shipType >= 60 && obj.shipType < 70 ? 'Passenger' : obj.shipType >= 70 && obj.shipType < 80 ? 'Cargo' : obj.shipType >= 80 && obj.shipType < 90 ? 'Tanker' : 'Vessel');
+        const speedKnots = obj.speed != null ? `${Number(obj.speed).toFixed(1)} kn` : '';
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name || obj.mmsi)}</strong><br/>${text(typeLabel)}${speedKnots ? ` · ${speedKnots}` : ''}</div>` };
+      }
       case 'military-flights-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.callsign || obj.registration || t('components.deckgl.tooltip.militaryAircraft'))}</strong><br/>${text(obj.type)}</div>` };
       case 'military-vessel-clusters-layer':
@@ -3964,6 +4005,7 @@ export class DeckGLMap {
       'protests-layer': 'protest',
       'military-flights-layer': 'militaryFlight',
       'military-vessels-layer': 'militaryVessel',
+      'civilian-vessels-layer': 'civilianVessel',
       'military-vessel-clusters-layer': 'militaryVesselCluster',
       'military-flight-clusters-layer': 'militaryFlightCluster',
       'natural-events-layer': 'natEvent',
@@ -4926,6 +4968,11 @@ export class DeckGLMap {
   public setAisData(disruptions: AisDisruptionEvent[], density: AisDensityZone[]): void {
     this.aisDisruptions = disruptions;
     this.aisDensity = density;
+    this.render();
+  }
+
+  public setCivilianVessels(vessels: import('@/services/maritime/index').SnapshotCandidateReport[]): void {
+    this.civilianVessels = vessels;
     this.render();
   }
 

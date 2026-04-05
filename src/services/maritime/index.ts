@@ -88,7 +88,7 @@ interface SnapshotStatus {
   messages: number;
 }
 
-interface SnapshotCandidateReport extends AisPositionData {
+export interface SnapshotCandidateReport extends AisPositionData {
   timestamp: number;
 }
 
@@ -121,6 +121,7 @@ let lastSequence = 0;
 
 let latestDisruptions: AisDisruptionEvent[] = [];
 let latestDensity: AisDensityZone[] = [];
+let latestCandidateReports: SnapshotCandidateReport[] = [];
 let latestStatus: SnapshotStatus = {
   connected: false,
   vessels: 0,
@@ -147,7 +148,7 @@ const isLocalhost = isClientRuntime && window.location.hostname === 'localhost';
 // ---- Internal Helpers ----
 
 function shouldIncludeCandidates(): boolean {
-  return positionCallbacks.size > 0;
+  return true; // Always fetch individual vessel positions for the civilian vessel layer
 }
 
 function parseSnapshot(data: unknown): {
@@ -329,6 +330,7 @@ async function pollSnapshot(force = false, signal?: AbortSignal): Promise<void> 
 
     latestDisruptions = snapshot.disruptions;
     latestDensity = snapshot.density;
+    latestCandidateReports = snapshot.candidateReports;
     latestStatus = snapshot.status;
     lastPollAt = Date.now();
 
@@ -404,9 +406,9 @@ export function getAisStatus(): { connected: boolean; vessels: number; messages:
   };
 }
 
-export async function fetchAisSignals(): Promise<{ disruptions: AisDisruptionEvent[]; density: AisDensityZone[] }> {
+export async function fetchAisSignals(): Promise<{ disruptions: AisDisruptionEvent[]; density: AisDensityZone[]; vessels: SnapshotCandidateReport[] }> {
   if (!aisConfigured) {
-    return { disruptions: [], density: [] };
+    return { disruptions: [], density: [], vessels: [] };
   }
 
   startPolling();
@@ -418,5 +420,6 @@ export async function fetchAisSignals(): Promise<{ disruptions: AisDisruptionEve
   return {
     disruptions: latestDisruptions,
     density: latestDensity,
+    vessels: latestCandidateReports,
   };
 }

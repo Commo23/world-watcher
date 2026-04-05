@@ -451,6 +451,12 @@ export class MapContainer {
     }
   }
 
+  public setCivilianVessels(vessels: import('@/services/maritime/index').SnapshotCandidateReport[]): void {
+    if (this.useDeckGL) {
+      this.deckGLMap?.setCivilianVessels(vessels);
+    }
+  }
+
   public setCableActivity(advisories: CableAdvisory[], repairShips: RepairShip[]): void {
     this.cachedCableAdvisories = advisories;
     this.cachedRepairShips = repairShips;
