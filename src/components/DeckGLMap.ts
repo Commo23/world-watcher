@@ -2535,6 +2535,35 @@ export class DeckGLMap {
     });
   }
 
+  private createCivilianVesselsLayer(): ScatterplotLayer {
+    return new ScatterplotLayer({
+      id: 'civilian-vessels-layer',
+      data: this.civilianVessels,
+      getPosition: (d) => [d.lon, d.lat],
+      getRadius: 4000,
+      getFillColor: (d) => {
+        const t = d.shipType ?? 0;
+        // Tanker (60-69): orange
+        if (t >= 60 && t < 70) return [255, 160, 60, 180] as [number, number, number, number];
+        // Cargo (70-79): cyan
+        if (t >= 70 && t < 80) return [60, 200, 220, 180] as [number, number, number, number];
+        // Tanker/chemical (80-89): amber
+        if (t >= 80 && t < 90) return [220, 180, 50, 180] as [number, number, number, number];
+        // Passenger (40-49): green
+        if (t >= 40 && t < 50) return [80, 220, 120, 180] as [number, number, number, number];
+        // Tug/special (50-59): purple
+        if (t >= 50 && t < 60) return [160, 100, 220, 180] as [number, number, number, number];
+        // Fishing (30): blue
+        if (t === 30) return [80, 140, 255, 180] as [number, number, number, number];
+        // Default: light gray
+        return [180, 180, 200, 140] as [number, number, number, number];
+      },
+      radiusMinPixels: 2,
+      radiusMaxPixels: 6,
+      pickable: true,
+    });
+  }
+
   private createMilitaryVesselClustersLayer(clusters: MilitaryVesselCluster[]): ScatterplotLayer {
     return new ScatterplotLayer({
       id: 'military-vessel-clusters-layer',
