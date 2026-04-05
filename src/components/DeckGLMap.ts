@@ -1498,6 +1498,11 @@ export class DeckGLMap {
       layers.push(this.createAisDisruptionsLayer());
     }
 
+    // Civilian vessels layer (individual ship positions)
+    if (mapLayers.ais && this.civilianVessels.length > 0) {
+      layers.push(this.createCivilianVesselsLayer());
+    }
+
     // GPS/GNSS jamming layer
     if (mapLayers.gpsJamming && this.gpsJammingHexes.length > 0) {
       layers.push(this.createGpsJammingLayer());
