@@ -4,20 +4,25 @@ import { getPersistentCache, setPersistentCache } from '../services/persistent-c
 const isDev = import.meta.env.DEV;
 const RESPONSE_CACHE_PREFIX = 'api-response:';
 
-// Supabase edge function base URL for RSS and Widget Agent
-const SUPABASE_FUNCTIONS_URL = `${import.meta.env.VITE_SUPABASE_URL || ''}/functions/v1`;
+// Supabase edge function base URL for RSS and Widget Agent (Lovable Cloud deployments).
+// On Vercel deployments VITE_SUPABASE_URL is typically empty — fall back to own API routes.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_FUNCTIONS_URL = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1` : '';
 
-// Widget agent: Supabase edge function
+// Widget agent: Supabase edge function when available, otherwise Vercel API route
 export function widgetAgentUrl(): string {
+  if (!SUPABASE_FUNCTIONS_URL) return '/api/widget-agent';
   return `${SUPABASE_FUNCTIONS_URL}/widget-agent`;
 }
 
 export function widgetAgentHealthUrl(): string {
+  if (!SUPABASE_FUNCTIONS_URL) return '/api/widget-agent';
   return `${SUPABASE_FUNCTIONS_URL}/widget-agent`;
 }
 
-// RSS proxy: Supabase edge function
+// RSS proxy: Supabase edge function when available, otherwise Vercel API route
 export function rssProxyUrl(feedUrl: string): string {
+  if (!SUPABASE_FUNCTIONS_URL) return `/api/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
   return `${SUPABASE_FUNCTIONS_URL}/rss-proxy?url=${encodeURIComponent(feedUrl)}`;
 }
 
