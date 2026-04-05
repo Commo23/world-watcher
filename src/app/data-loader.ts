@@ -1541,7 +1541,8 @@ export class DataLoaderManager implements AppModule {
     try {
       const { EconomicServiceClient } = await import('@/generated/client/worldmonitor/economic/v1/service_client');
       const { getRpcBaseUrl } = await import('@/services/rpc-client');
-      const client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: (...args: Parameters<typeof fetch>) => globalThis.fetch(...args) });
+      const { economicFetch } = await import('@/services/economic/supabase-fetch');
+      const client = new EconomicServiceClient(getRpcBaseUrl(), { fetch: economicFetch });
       const resp = await client.getFredSeriesBatch({ seriesIds: ['DGS2', 'DGS10', 'DGS30'], limit: 1 });
       const lastVal = (id: string): number => {
         const obs = resp.results[id]?.observations;
