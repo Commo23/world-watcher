@@ -3570,6 +3570,12 @@ export class DeckGLMap {
         return { html: `<div class="deckgl-tooltip"><strong>M${(obj.magnitude || 0).toFixed(1)} ${t('components.deckgl.tooltip.earthquake')}</strong><br/>${text(obj.place)}</div>` };
       case 'military-vessels-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name)}</strong><br/>${text(obj.operatorCountry)}</div>` };
+      case 'civilian-vessels-layer': {
+        const shipTypes: Record<number, string> = { 30: 'Fishing', 52: 'Tug', 60: 'Passenger', 70: 'Cargo', 71: 'Container', 72: 'Bulk', 80: 'Tanker', 84: 'LNG' };
+        const typeLabel = shipTypes[obj.shipType] || (obj.shipType >= 60 && obj.shipType < 70 ? 'Passenger' : obj.shipType >= 70 && obj.shipType < 80 ? 'Cargo' : obj.shipType >= 80 && obj.shipType < 90 ? 'Tanker' : 'Vessel');
+        const speedKnots = obj.speed != null ? `${Number(obj.speed).toFixed(1)} kn` : '';
+        return { html: `<div class="deckgl-tooltip"><strong>${text(obj.name || obj.mmsi)}</strong><br/>${text(typeLabel)}${speedKnots ? ` · ${speedKnots}` : ''}</div>` };
+      }
       case 'military-flights-layer':
         return { html: `<div class="deckgl-tooltip"><strong>${text(obj.callsign || obj.registration || t('components.deckgl.tooltip.militaryAircraft'))}</strong><br/>${text(obj.type)}</div>` };
       case 'military-vessel-clusters-layer':
