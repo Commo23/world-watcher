@@ -88,7 +88,7 @@ interface SnapshotStatus {
   messages: number;
 }
 
-interface SnapshotCandidateReport extends AisPositionData {
+export interface SnapshotCandidateReport extends AisPositionData {
   timestamp: number;
 }
 
