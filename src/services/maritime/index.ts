@@ -176,17 +176,36 @@ function parseSnapshot(data: unknown): {
   };
 }
 
+// ---- Supabase Edge Function URL for AIS snapshot ----
+
+const SUPABASE_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
+const SUPABASE_AIS_SNAPSHOT_URL = SUPABASE_PROJECT_ID
+  ? `https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1/ais-snapshot`
+  : '';
+
 // ---- Hybrid Fetch Strategy ----
 
 async function fetchRawRelaySnapshot(includeCandidates: boolean, signal?: AbortSignal): Promise<unknown> {
   const query = `?candidates=${includeCandidates ? 'true' : 'false'}`;
 
+  // 1) Try Supabase Edge Function first (no Railway dependency)
+  if (SUPABASE_AIS_SNAPSHOT_URL) {
+    try {
+      const supabaseRes = await fetch(`${SUPABASE_AIS_SNAPSHOT_URL}${query}`, {
+        headers: { Accept: 'application/json' },
+        signal,
+      });
+      if (supabaseRes.ok) return supabaseRes.json();
+    } catch { /* Supabase edge function unavailable -- fall through */ }
+  }
+
+  // 2) Vercel proxy fallback
   try {
     const proxied = await fetch(`${SNAPSHOT_PROXY_URL}${query}`, { headers: { Accept: 'application/json' }, signal });
     if (proxied.ok) return proxied.json();
   } catch { /* Proxy unavailable -- fall through */ }
 
-  // Local development fallback only.
+  // 3) Local development fallback only.
   if (isLocalhost && DIRECT_RAILWAY_SNAPSHOT_URL) {
     try {
       const railway = await fetch(`${DIRECT_RAILWAY_SNAPSHOT_URL}${query}`, { headers: { Accept: 'application/json' }, signal });
