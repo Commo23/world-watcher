@@ -330,6 +330,7 @@ async function pollSnapshot(force = false, signal?: AbortSignal): Promise<void> 
 
     latestDisruptions = snapshot.disruptions;
     latestDensity = snapshot.density;
+    latestCandidateReports = snapshot.candidateReports;
     latestStatus = snapshot.status;
     lastPollAt = Date.now();
 
