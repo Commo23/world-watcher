@@ -2171,10 +2171,13 @@ export class DataLoaderManager implements AppModule {
 
   async loadAisSignals(): Promise<void> {
     try {
-      const { disruptions, density } = await fetchAisSignals();
+      const { disruptions, density, vessels } = await fetchAisSignals();
       const aisStatus = getAisStatus();
       console.log('[Ships] Events:', { disruptions: disruptions.length, density: density.length, vessels: aisStatus.vessels });
       this.ctx.map?.setAisData(disruptions, density);
+      if (vessels.length > 0) {
+        this.ctx.map?.setCivilianVessels(vessels);
+      }
       signalAggregator.ingestAisDisruptions(disruptions);
       ingestAisDisruptionsForCII(disruptions);
       this.refreshCiiAndBrief();
