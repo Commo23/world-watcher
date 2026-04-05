@@ -4930,6 +4930,11 @@ export class DeckGLMap {
     this.render();
   }
 
+  public setCivilianVessels(vessels: import('@/services/maritime/index').SnapshotCandidateReport[]): void {
+    this.civilianVessels = vessels;
+    this.render();
+  }
+
   public setCableActivity(advisories: CableAdvisory[], repairShips: RepairShip[]): void {
     this.cableAdvisories = advisories;
     this.repairShips = repairShips;
