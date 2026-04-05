@@ -22,6 +22,10 @@ export const SITE_VARIANT: string = (() => {
   if (h.startsWith('happy.')) return 'happy';
   if (h.startsWith('commodity.')) return 'commodity';
 
+  // Read ?variant= query param (works on localhost, Lovable, Vercel, etc.)
+  const urlVariant = new URLSearchParams(location.search).get('variant');
+  if (urlVariant === 'tech' || urlVariant === 'full' || urlVariant === 'finance' || urlVariant === 'happy' || urlVariant === 'commodity') return urlVariant;
+
   if (h === 'localhost' || h === '127.0.0.1') {
     const stored = localStorage.getItem('worldmonitor-variant');
     if (stored === 'tech' || stored === 'full' || stored === 'finance' || stored === 'happy' || stored === 'commodity') return stored;
