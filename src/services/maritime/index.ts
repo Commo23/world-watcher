@@ -121,6 +121,7 @@ let lastSequence = 0;
 
 let latestDisruptions: AisDisruptionEvent[] = [];
 let latestDensity: AisDensityZone[] = [];
+let latestCandidateReports: SnapshotCandidateReport[] = [];
 let latestStatus: SnapshotStatus = {
   connected: false,
   vessels: 0,
