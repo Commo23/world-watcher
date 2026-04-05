@@ -4005,6 +4005,7 @@ export class DeckGLMap {
       'protests-layer': 'protest',
       'military-flights-layer': 'militaryFlight',
       'military-vessels-layer': 'militaryVessel',
+      'civilian-vessels-layer': 'civilianVessel',
       'military-vessel-clusters-layer': 'militaryVesselCluster',
       'military-flight-clusters-layer': 'militaryFlightCluster',
       'natural-events-layer': 'natEvent',
