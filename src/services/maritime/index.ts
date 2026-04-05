@@ -148,7 +148,7 @@ const isLocalhost = isClientRuntime && window.location.hostname === 'localhost';
 // ---- Internal Helpers ----
 
 function shouldIncludeCandidates(): boolean {
-  return positionCallbacks.size > 0;
+  return true; // Always fetch individual vessel positions for the civilian vessel layer
 }
 
 function parseSnapshot(data: unknown): {
