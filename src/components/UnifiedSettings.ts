@@ -354,12 +354,9 @@ export class UnifiedSettings {
     if (!container) return;
 
     const savedSettings = this.config.getPanelSettings();
-    const pro = isProUser();
     const entries = this.getVisiblePanelEntries();
     container.innerHTML = entries.map(([key, panel]) => {
-      const entitled = isPanelEntitled(key, ALL_PANELS[key] ?? panel, pro);
-      const locked = !entitled;
-      const changed = !locked && savedSettings[key]?.enabled !== panel.enabled;
+      const changed = savedSettings[key]?.enabled !== panel.enabled;
       const displayName = this.config.getLocalizedPanelName(key, getEffectivePanelConfig(key, SITE_VARIANT).name ?? panel.name);
       return `
         <div class="panel-toggle-item ${panel.enabled && !locked ? 'active' : ''}${changed ? ' changed' : ''}${locked ? ' pro-locked' : ''}" data-panel="${escapeHtml(key)}" aria-pressed="${panel.enabled && !locked}" ${locked ? 'data-pro-locked="1"' : ''}>
