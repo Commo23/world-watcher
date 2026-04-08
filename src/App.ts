@@ -797,11 +797,9 @@ export class App {
     await fetchBootstrapData();
     this.bootstrapHydrationState = getBootstrapHydrationState();
 
-    // Verify OAuth OTT and hydrate auth session BEFORE any UI subscribes to auth state
-    if (isProUser()) {
-      await initAuthState();
-      initAuthAnalytics();
-    }
+    // Hydrate auth session
+    await initAuthState();
+    initAuthAnalytics();
 
 
     const geoCoordsPromise: Promise<PreciseCoordinates | null> =
@@ -869,7 +867,7 @@ export class App {
     correlationEngine.registerAdapter(disasterAdapter);
     this.state.correlationEngine = correlationEngine;
     this.eventHandlers.setupUnifiedSettings();
-    if (isProUser()) this.eventHandlers.setupAuthWidget();
+    this.eventHandlers.setupAuthWidget();
 
     // Phase 4: SearchManager, MapLayerHandlers, CountryIntel
     this.searchManager.init();
@@ -1088,7 +1086,7 @@ export class App {
         'market-implications',
         () => this.dataLoader.loadMarketImplications(),
         REFRESH_INTERVALS.marketImplications,
-        () => (getSecretState('WORLDMONITOR_API_KEY').present || isProUser()) && this.isPanelNearViewport('market-implications'),
+        () => this.isPanelNearViewport('market-implications'),
       );
     }
 

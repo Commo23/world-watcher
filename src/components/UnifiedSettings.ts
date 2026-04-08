@@ -400,14 +400,6 @@ export class UnifiedSettings {
   private toggleDraftPanel(key: string): void {
     const panel = this.draftPanelSettings[key];
     if (!panel) return;
-    if (!panel.enabled && !isPanelEntitled(key, ALL_PANELS[key] ?? panel, isProUser())) return;
-    if (!panel.enabled && !isProUser()) {
-      const enabledCount = Object.entries(this.draftPanelSettings).filter(([k, p]) => p.enabled && !k.startsWith('cw-')).length;
-      if (enabledCount >= FREE_MAX_PANELS) {
-        showToast(t('modals.settingsWindow.freePanelLimit', { max: String(FREE_MAX_PANELS) }));
-        return;
-      }
-    }
     panel.enabled = !panel.enabled;
     this.panelsJustSaved = false;
     this.renderPanelsTab();
