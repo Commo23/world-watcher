@@ -192,8 +192,13 @@ async function fetchRawRelaySnapshot(includeCandidates: boolean, signal?: AbortS
   // 1) Try Supabase Edge Function first (no Railway dependency)
   if (SUPABASE_AIS_SNAPSHOT_URL) {
     try {
+      const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
       const supabaseRes = await fetch(`${SUPABASE_AIS_SNAPSHOT_URL}${query}`, {
-        headers: { Accept: 'application/json' },
+        headers: {
+          Accept: 'application/json',
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`,
+        },
         signal,
       });
       if (supabaseRes.ok) return supabaseRes.json();
