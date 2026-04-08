@@ -1,5 +1,5 @@
 import { subscribeAuthState, type AuthSession } from '@/services/auth-state';
-import { mountUserButton, openSignIn } from '@/services/clerk';
+import { mountUserButton } from '@/services/clerk';
 
 export class AuthHeaderWidget {
   private container: HTMLElement;
@@ -39,12 +39,7 @@ export class AuthHeaderWidget {
     this.container.innerHTML = '';
 
     if (!state.user) {
-      // Signed out -- show Sign In button
-      const btn = document.createElement('button');
-      btn.className = 'auth-signin-btn';
-      btn.textContent = 'Sign In';
-      btn.addEventListener('click', () => openSignIn());
-      this.container.appendChild(btn);
+      // No sign-in button -- silent anonymous state
       return;
     }
 
