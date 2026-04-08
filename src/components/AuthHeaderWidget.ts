@@ -1,5 +1,5 @@
 import { subscribeAuthState, type AuthSession } from '@/services/auth-state';
-import { mountUserButton, openSignIn } from '@/services/clerk';
+import { mountUserButton } from '@/services/clerk';
 
 export class AuthHeaderWidget {
   private container: HTMLElement;
