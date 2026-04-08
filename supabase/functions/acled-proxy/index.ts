@@ -1,4 +1,7 @@
-import { corsHeaders } from "@supabase/supabase-js/cors";
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 // In-memory token cache (persists across warm invocations)
 let cachedToken: { access_token: string; refresh_token: string; expires_at: number } | null = null;
