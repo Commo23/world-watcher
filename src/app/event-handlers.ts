@@ -140,7 +140,6 @@ export class EventHandlerManager implements AppModule {
     if (!panelId) return;
     const config = this.ctx.panelSettings[panelId];
     if (!config) return;
-    }
     config.enabled = true;
     trackPanelToggled(panelId, true);
     saveToStorage(STORAGE_KEYS.panels, this.ctx.panelSettings);
