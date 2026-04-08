@@ -159,13 +159,14 @@ async function fetchChokepointTransits(): Promise<ChokepointTransit[]> {
     const header = lines[0].replace(/^\ufeff/, '').split(',');
     const idx = (col: string) => header.indexOf(col);
 
-    const transits: ChokepointTransit[] = [];
-    // Only keep latest 30 days per chokepoint
-    for (let i = lines.length - 1; i >= 1 && transits.length < 200; i--) {
+    // Parse ALL rows and keep latest 60 days per chokepoint
+    const allByPort = new Map<string, ChokepointTransit[]>();
+    for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',');
       if (cols.length < header.length) continue;
-      transits.push({
-        portId: cols[idx('portid')] || '',
+      const portId = cols[idx('portid')] || '';
+      const t: ChokepointTransit = {
+        portId,
         portName: cols[idx('portname')] || '',
         date: (cols[idx('date')] || '').slice(0, 10).replace(/\//g, '-'),
         total: Number(cols[idx('n_total')]) || 0,
@@ -175,7 +176,16 @@ async function fetchChokepointTransits(): Promise<ChokepointTransit[]> {
         generalCargo: Number(cols[idx('n_general_cargo')]) || 0,
         roro: Number(cols[idx('n_roro')]) || 0,
         capacity: Number(cols[idx('capacity')]) || 0,
-      });
+      };
+      if (!allByPort.has(portId)) allByPort.set(portId, []);
+      allByPort.get(portId)!.push(t);
+    }
+
+    // Keep latest 60 entries per chokepoint
+    const transits: ChokepointTransit[] = [];
+    for (const [, portTransits] of allByPort) {
+      portTransits.sort((a, b) => b.date.localeCompare(a.date));
+      transits.push(...portTransits.slice(0, 60));
     }
 
     if (transits.length > 0) {
