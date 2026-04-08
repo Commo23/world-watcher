@@ -29,7 +29,7 @@ import type { PositionSample } from '@/services/aviation';
 import { fetchAircraftPositions } from '@/services/aviation';
 import type { MilitaryFlight } from '@/types';
 import { isProUser } from '@/services/widget-store';
-import { getAuthState } from '@/services/auth-state';
+
 
 export interface SearchManagerCallbacks {
   openCountryBriefByCode: (code: string, country: string) => void;
@@ -218,7 +218,6 @@ export class SearchManager implements AppModule {
     // so mid-session sign-ins get the feature without a page reload.
     {
       this.ctx.searchModal.setOnFlightSearch((callsign) => {
-        if (!isProUser() && getAuthState().user?.role !== 'pro') return;
         fetchAircraftPositions({ callsign }).then((positions) => {
           if (!this.ctx.searchModal) return;
           // Deduplicate by callsign: keep the most recently observed entry per callsign.
