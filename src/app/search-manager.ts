@@ -29,7 +29,7 @@ import type { PositionSample } from '@/services/aviation';
 import { fetchAircraftPositions } from '@/services/aviation';
 import type { MilitaryFlight } from '@/types';
 import { isProUser } from '@/services/widget-store';
-import { getAuthState } from '@/services/auth-state';
+
 
 export interface SearchManagerCallbacks {
   openCountryBriefByCode: (code: string, country: string) => void;

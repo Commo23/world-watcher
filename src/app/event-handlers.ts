@@ -2,8 +2,7 @@ import type { AppContext, AppModule } from '@/app/app-context';
 import type { AirlineIntelPanel } from '@/components/AirlineIntelPanel';
 import type { CustomWidgetPanel } from '@/components/CustomWidgetPanel';
 import { openWidgetChatModal } from '@/components/WidgetChatModal';
-import { deleteWidget, getWidget, saveWidget, isProUser } from '@/services/widget-store';
-import { FREE_MAX_PANELS, FREE_MAX_SOURCES } from '@/config/panels';
+import { deleteWidget, getWidget, saveWidget } from '@/services/widget-store';
 import type { McpDataPanel } from '@/components/McpDataPanel';
 import { openMcpConnectModal } from '@/components/McpConnectModal';
 import { deleteMcpPanel, getMcpPanel, saveMcpPanel } from '@/services/mcp-store';
@@ -52,7 +51,7 @@ import {
   trackMapLayerToggle,
   trackPanelToggled,
   trackDownloadClicked,
-  trackGateHit,
+  
 } from '@/services/analytics';
 import { detectPlatform, allButtons, buttonsForPlatform } from '@/components/DownloadBanner';
 import type { Platform } from '@/components/DownloadBanner';
@@ -65,7 +64,7 @@ import { AuthLauncher } from '@/components/AuthLauncher';
 import { AuthHeaderWidget } from '@/components/AuthHeaderWidget';
 import { t } from '@/services/i18n';
 import { TvModeController } from '@/services/tv-mode';
-import { getAuthState, subscribeAuthState } from '@/services/auth-state';
+
 
 export interface EventHandlerCallbacks {
   updateSearchIndex: () => void;
