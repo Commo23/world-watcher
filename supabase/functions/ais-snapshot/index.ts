@@ -4,15 +4,16 @@ const corsHeaders = {
 };
 
 // ============================================================================
-// AIS Snapshot Edge Function
-// Connects to AISStream WebSocket for real vessel positions.
-// Also fetches from free public AIS APIs for broader coverage.
+// AIS Snapshot Edge Function — Real-time vessel data
+// Primary: digitraffic.fi (Finnish AIS, free, no auth)
+// Secondary: AISStream WebSocket (if API key configured)
 // ============================================================================
 
 interface VesselReport {
   mmsi: string; name: string; lat: number; lon: number;
   shipType: number; heading: number; speed: number; course: number;
   timestamp: number; flag?: string; destination?: string;
+  navStatus?: number;
 }
 
 interface DensityZone {
@@ -30,36 +31,145 @@ interface Disruption {
 
 // ---- In-memory cache ----
 let cachedVessels: VesselReport[] = [];
+let cachedMetadata: Map<string, { name: string; shipType: number; destination: string; flag: string }> = new Map();
 let cacheTimestamp = 0;
-const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes for fresher data
+const CACHE_TTL_MS = 90_000; // 90 seconds for fresher data
 let inFlightFetch: Promise<VesselReport[]> | null = null;
+let metaCacheTimestamp = 0;
+const META_CACHE_TTL_MS = 10 * 60 * 1000; // 10 min for vessel metadata
 
-// ---- Chokepoint definitions with bounding boxes for vessel counting ----
 const CHOKEPOINTS = [
-  { id: 'hormuz', name: 'Strait of Hormuz', lat: 26.56, lon: 56.25, baseShips: 85, region: 'Persian Gulf', note: '20% of global oil transits', radius: 1.5 },
-  { id: 'suez', name: 'Suez Canal', lat: 30.45, lon: 32.35, baseShips: 55, region: 'Egypt', note: 'Europe-Asia corridor', radius: 1.0 },
-  { id: 'malacca', name: 'Strait of Malacca', lat: 2.5, lon: 101.2, baseShips: 95, region: 'Southeast Asia', note: 'Primary Asia-Pacific oil route', radius: 2.0 },
-  { id: 'bab-el-mandeb', name: 'Bab el-Mandeb', lat: 12.6, lon: 43.3, baseShips: 40, region: 'Red Sea', note: 'Red Sea access; Yemen/Houthi area', radius: 1.5 },
-  { id: 'panama', name: 'Panama Canal', lat: 9.08, lon: -79.68, baseShips: 38, region: 'Central America', note: 'Americas east-west transit', radius: 1.0 },
-  { id: 'taiwan', name: 'Taiwan Strait', lat: 24.0, lon: 119.5, baseShips: 70, region: 'East Asia', note: 'Semiconductor supply chain', radius: 2.0 },
-  { id: 'cape', name: 'Cape of Good Hope', lat: -34.35, lon: 18.5, baseShips: 30, region: 'South Africa', note: 'Suez bypass for VLCCs', radius: 2.0 },
-  { id: 'gibraltar', name: 'Strait of Gibraltar', lat: 35.96, lon: -5.5, baseShips: 65, region: 'Mediterranean', note: 'Atlantic-Mediterranean gateway', radius: 1.0 },
-  { id: 'bosporus', name: 'Bosporus Strait', lat: 41.12, lon: 29.05, baseShips: 48, region: 'Turkey', note: 'Black Sea access', radius: 0.8 },
-  { id: 'korea', name: 'Korea Strait', lat: 34.0, lon: 129.0, baseShips: 55, region: 'East Asia', note: 'Japan-Korea trade corridor', radius: 2.0 },
-  { id: 'dover', name: 'Dover Strait', lat: 51.0, lon: 1.5, baseShips: 120, region: 'English Channel', note: "World's busiest shipping lane", radius: 1.0 },
-  { id: 'kerch', name: 'Kerch Strait', lat: 45.35, lon: 36.6, baseShips: 15, region: 'Black Sea', note: 'Azov Sea access', radius: 0.8 },
-  { id: 'lombok', name: 'Lombok Strait', lat: -8.4, lon: 115.7, baseShips: 25, region: 'Indonesia', note: 'Malacca bypass for large tankers', radius: 1.5 },
+  { id: 'hormuz', name: 'Strait of Hormuz', lat: 26.56, lon: 56.25, baseShips: 85, region: 'Persian Gulf', note: '20% of global oil transits', radius: 2.0 },
+  { id: 'suez', name: 'Suez Canal', lat: 30.45, lon: 32.35, baseShips: 55, region: 'Egypt', note: 'Europe-Asia corridor', radius: 1.5 },
+  { id: 'malacca', name: 'Strait of Malacca', lat: 2.5, lon: 101.2, baseShips: 95, region: 'Southeast Asia', note: 'Primary Asia-Pacific oil route', radius: 3.0 },
+  { id: 'bab-el-mandeb', name: 'Bab el-Mandeb', lat: 12.6, lon: 43.3, baseShips: 40, region: 'Red Sea', note: 'Red Sea access; Yemen/Houthi area', radius: 2.0 },
+  { id: 'panama', name: 'Panama Canal', lat: 9.08, lon: -79.68, baseShips: 38, region: 'Central America', note: 'Americas east-west transit', radius: 1.5 },
+  { id: 'taiwan', name: 'Taiwan Strait', lat: 24.0, lon: 119.5, baseShips: 70, region: 'East Asia', note: 'Semiconductor supply chain', radius: 3.0 },
+  { id: 'cape', name: 'Cape of Good Hope', lat: -34.35, lon: 18.5, baseShips: 30, region: 'South Africa', note: 'Suez bypass for VLCCs', radius: 3.0 },
+  { id: 'gibraltar', name: 'Strait of Gibraltar', lat: 35.96, lon: -5.5, baseShips: 65, region: 'Mediterranean', note: 'Atlantic-Mediterranean gateway', radius: 1.5 },
+  { id: 'bosporus', name: 'Bosporus Strait', lat: 41.12, lon: 29.05, baseShips: 48, region: 'Turkey', note: 'Black Sea access', radius: 1.0 },
+  { id: 'korea', name: 'Korea Strait', lat: 34.0, lon: 129.0, baseShips: 55, region: 'East Asia', note: 'Japan-Korea trade corridor', radius: 2.5 },
+  { id: 'dover', name: 'Dover Strait', lat: 51.0, lon: 1.5, baseShips: 120, region: 'English Channel', note: "World's busiest shipping lane", radius: 1.5 },
+  { id: 'kerch', name: 'Kerch Strait', lat: 45.35, lon: 36.6, baseShips: 15, region: 'Black Sea', note: 'Azov Sea access', radius: 1.0 },
+  { id: 'lombok', name: 'Lombok Strait', lat: -8.4, lon: 115.7, baseShips: 25, region: 'Indonesia', note: 'Malacca bypass for large tankers', radius: 2.0 },
 ];
 
-// ---- AISStream WebSocket fetcher ----
+// ---- Primary: Digitraffic.fi (Finnish AIS — free, no auth, thousands of vessels) ----
+
+async function fetchFromDigitraffic(): Promise<VesselReport[]> {
+  try {
+    console.log('[AIS] Fetching from digitraffic.fi...');
+    const resp = await fetch('https://meri.digitraffic.fi/api/ais/v1/locations', {
+      headers: {
+        'User-Agent': 'WorldMonitor/1.0',
+        'Accept-Encoding': 'gzip',
+        'Digitraffic-User': 'WorldMonitor',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) {
+      console.error(`[AIS] digitraffic returned ${resp.status}`);
+      await resp.text();
+      return [];
+    }
+
+    const data = await resp.json();
+    // Response is GeoJSON FeatureCollection
+    const features = data?.features;
+    if (!Array.isArray(features)) {
+      console.error('[AIS] digitraffic: unexpected response format');
+      return [];
+    }
+
+    console.log(`[AIS] digitraffic returned ${features.length} vessel positions`);
+
+    const vessels: VesselReport[] = [];
+    for (const f of features) {
+      const props = f.properties;
+      const coords = f.geometry?.coordinates;
+      if (!props || !coords || coords.length < 2) continue;
+
+      const mmsi = String(props.mmsi || '');
+      if (!mmsi || mmsi === '0') continue;
+
+      const lon = Number(coords[0]);
+      const lat = Number(coords[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      if (lat === 0 && lon === 0) continue;
+
+      // Look up metadata from cache
+      const meta = cachedMetadata.get(mmsi);
+
+      vessels.push({
+        mmsi,
+        name: meta?.name || '',
+        lat: Math.round(lat * 10000) / 10000,
+        lon: Math.round(lon * 10000) / 10000,
+        shipType: meta?.shipType || 0,
+        heading: Number(props.heading) || 0,
+        speed: Number(props.sog) || 0,
+        course: Number(props.cog) || 0,
+        timestamp: (Number(props.timestampExternal) || Date.now() / 1000) * 1000,
+        navStatus: Number(props.navStat) ?? undefined,
+        flag: meta?.flag || '',
+        destination: meta?.destination || '',
+      });
+    }
+
+    return vessels;
+  } catch (e) {
+    console.error('[AIS] digitraffic fetch failed:', e);
+    return [];
+  }
+}
+
+// Fetch vessel metadata (name, type, destination) separately — cached longer
+async function fetchVesselMetadata(): Promise<void> {
+  const now = Date.now();
+  if (cachedMetadata.size > 0 && (now - metaCacheTimestamp) < META_CACHE_TTL_MS) return;
+
+  try {
+    console.log('[AIS] Fetching vessel metadata from digitraffic...');
+    const resp = await fetch('https://meri.digitraffic.fi/api/ais/v1/vessels', {
+      headers: {
+        'User-Agent': 'WorldMonitor/1.0',
+        'Digitraffic-User': 'WorldMonitor',
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) { await resp.text(); return; }
+    const data = await resp.json();
+    if (!Array.isArray(data)) return;
+
+    const newMeta = new Map<string, { name: string; shipType: number; destination: string; flag: string }>();
+    for (const v of data) {
+      const mmsi = String(v.mmsi || '');
+      if (!mmsi) continue;
+      newMeta.set(mmsi, {
+        name: String(v.name || '').trim(),
+        shipType: Number(v.shipType) || 0,
+        destination: String(v.destination || '').trim(),
+        flag: String(v.countryCode || '').trim(),
+      });
+    }
+    if (newMeta.size > 0) {
+      cachedMetadata = newMeta;
+      metaCacheTimestamp = Date.now();
+      console.log(`[AIS] Cached metadata for ${newMeta.size} vessels`);
+    }
+  } catch (e) {
+    console.error('[AIS] Metadata fetch failed:', e);
+  }
+}
+
+// ---- AISStream WebSocket (supplementary) ----
 
 async function fetchFromAISStream(apiKey: string): Promise<VesselReport[]> {
   const vessels = new Map<string, VesselReport>();
-  const COLLECT_DURATION_MS = 12000; // 12 seconds for more data
+  const COLLECT_DURATION_MS = 10000;
 
   return new Promise<VesselReport[]>((resolve) => {
     const timeout = setTimeout(() => {
-      console.log(`[AISStream] Collection timeout reached, got ${vessels.size} vessels`);
       try { ws.close(); } catch { /* ignore */ }
       resolve(Array.from(vessels.values()));
     }, COLLECT_DURATION_MS);
@@ -67,51 +177,37 @@ async function fetchFromAISStream(apiKey: string): Promise<VesselReport[]> {
     let ws: WebSocket;
     try {
       ws = new WebSocket('wss://stream.aisstream.io/v0/stream');
-      console.log('[AISStream] WebSocket connecting...');
-    } catch (e) {
-      console.error('[AISStream] WebSocket constructor failed:', e);
+    } catch {
       clearTimeout(timeout);
       resolve([]);
       return;
     }
 
     ws.onopen = () => {
-      console.log('[AISStream] WebSocket connected, subscribing...');
-      const subscriptionMessage = {
+      ws.send(JSON.stringify({
         Apikey: apiKey,
-        BoundingBoxes: [
-          [[-90, -180], [90, 180]], // Entire world
-        ],
+        BoundingBoxes: [[[-90, -180], [90, 180]]],
         FilterMessageTypes: ['PositionReport', 'ShipStaticData', 'StandardClassBPositionReport'],
-      };
-      ws.send(JSON.stringify(subscriptionMessage));
+      }));
     };
 
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(typeof event.data === 'string' ? event.data : '');
-        
-        // Check for error messages from AISStream
-        if (msg?.ERROR || msg?.error) {
-          console.error('[AISStream] API error:', msg.ERROR || msg.error);
-          return;
-        }
-
+        if (msg?.ERROR) { console.error('[AISStream]', msg.ERROR); return; }
         const meta = msg?.MetaData;
         if (!meta) return;
-
         const mmsi = String(meta.MMSI || '');
         if (!mmsi || mmsi === '0') return;
-
         const lat = Number(meta.latitude);
         const lon = Number(meta.longitude);
         if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
 
         const posReport = msg?.Message?.PositionReport || msg?.Message?.StandardClassBPositionReport;
         const staticData = msg?.Message?.ShipStaticData;
-
         const existing = vessels.get(mmsi);
-        const vessel: VesselReport = {
+
+        vessels.set(mmsi, {
           mmsi,
           name: staticData?.Name || meta.ShipName || existing?.name || '',
           lat: Math.round(lat * 10000) / 10000,
@@ -122,140 +218,43 @@ async function fetchFromAISStream(apiKey: string): Promise<VesselReport[]> {
           course: posReport?.Cog ?? existing?.course ?? 0,
           timestamp: meta.time_utc ? new Date(meta.time_utc).getTime() : Date.now(),
           flag: meta.country || existing?.flag || '',
-          destination: staticData?.Destination || posReport?.Destination || existing?.destination || '',
-        };
-
-        vessels.set(mmsi, vessel);
-      } catch { /* skip malformed messages */ }
+          destination: staticData?.Destination || existing?.destination || '',
+        });
+      } catch { /* skip */ }
     };
 
-    ws.onerror = (e) => {
-      console.error('[AISStream] WebSocket error:', e);
-      clearTimeout(timeout);
-      try { ws.close(); } catch { /* ignore */ }
-      resolve(Array.from(vessels.values()));
-    };
-
-    ws.onclose = (e) => {
-      console.log(`[AISStream] WebSocket closed: code=${e.code} reason=${e.reason}, vessels=${vessels.size}`);
-      clearTimeout(timeout);
-      resolve(Array.from(vessels.values()));
-    };
+    ws.onerror = () => { clearTimeout(timeout); try { ws.close(); } catch {} resolve(Array.from(vessels.values())); };
+    ws.onclose = () => { clearTimeout(timeout); resolve(Array.from(vessels.values())); };
   });
 }
 
-// ---- Fallback: Fetch from public marine traffic APIs ----
-
-async function fetchFromPublicAPIs(): Promise<VesselReport[]> {
-  const vessels: VesselReport[] = [];
-  
-  // Try multiple free/open AIS data sources
-  const sources = [
-    fetchFromBarentsWatch(),
-    fetchFromDigitalOceanAIS(),
-  ];
-
-  const results = await Promise.allSettled(sources);
-  for (const result of results) {
-    if (result.status === 'fulfilled' && result.value.length > 0) {
-      vessels.push(...result.value);
-    }
-  }
-  return vessels;
-}
-
-// Free AIS data from BarentsWatch (Norwegian waters - public API)
-async function fetchFromBarentsWatch(): Promise<VesselReport[]> {
-  try {
-    // Open data from Norwegian Coastal Administration
-    const resp = await fetch('https://live.ais.barentswatch.no/v1/latest/combined?modelType=Full', {
-      headers: { 'User-Agent': 'WorldMonitor/1.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!resp.ok) { await resp.text(); return []; }
-    const data = await resp.json();
-    if (!Array.isArray(data)) return [];
-    
-    return data.slice(0, 2000).map((v: any): VesselReport => ({
-      mmsi: String(v.mmsi || ''),
-      name: String(v.name || v.shipName || ''),
-      lat: Number(v.latitude) || 0,
-      lon: Number(v.longitude) || 0,
-      shipType: Number(v.shipType) || 0,
-      heading: Number(v.trueHeading) || 0,
-      speed: Number(v.speedOverGround) || 0,
-      course: Number(v.courseOverGround) || 0,
-      timestamp: v.msgtime ? new Date(v.msgtime).getTime() : Date.now(),
-      flag: String(v.country || ''),
-      destination: String(v.destination || ''),
-    })).filter((v: VesselReport) => v.lat !== 0 && v.lon !== 0);
-  } catch {
-    return [];
-  }
-}
-
-// Fetch from DigitalOcean-hosted AIS feed (public)
-async function fetchFromDigitalOceanAIS(): Promise<VesselReport[]> {
-  try {
-    // Try the Danish Maritime Authority public AIS data
-    const resp = await fetch('https://ais.dma.dk/ais-ab/ws/positions', {
-      headers: { 'User-Agent': 'WorldMonitor/1.0', 'Accept': 'application/json' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!resp.ok) { await resp.text(); return []; }
-    const data = await resp.json();
-    if (!Array.isArray(data)) return [];
-    
-    return data.slice(0, 2000).map((v: any): VesselReport => ({
-      mmsi: String(v.mmsi || ''),
-      name: String(v.name || ''),
-      lat: Number(v.lat || v.latitude) || 0,
-      lon: Number(v.lon || v.longitude) || 0,
-      shipType: Number(v.shipType || v.type) || 0,
-      heading: Number(v.heading || v.trueHeading) || 0,
-      speed: Number(v.sog || v.speed) || 0,
-      course: Number(v.cog || v.course) || 0,
-      timestamp: Date.now(),
-      flag: String(v.flag || v.country || ''),
-      destination: String(v.destination || ''),
-    })).filter((v: VesselReport) => v.lat !== 0 && v.lon !== 0);
-  } catch {
-    return [];
-  }
-}
+// ---- Main vessel fetcher ----
 
 async function getVessels(): Promise<VesselReport[]> {
   const now = Date.now();
   if (cachedVessels.length > 0 && (now - cacheTimestamp) < CACHE_TTL_MS) {
-    console.log(`[AIS] Returning cached ${cachedVessels.length} vessels (age: ${Math.round((now - cacheTimestamp) / 1000)}s)`);
     return cachedVessels;
   }
-
   if (inFlightFetch) return inFlightFetch;
 
   inFlightFetch = (async () => {
-    let vessels: VesselReport[] = [];
+    // Fetch metadata in parallel with positions
+    const [_, digitrafficVessels] = await Promise.all([
+      fetchVesselMetadata(),
+      fetchFromDigitraffic(),
+    ]);
 
-    // 1. Try AISStream first
+    let vessels = digitrafficVessels;
+    console.log(`[AIS] Digitraffic: ${vessels.length} vessels`);
+
+    // Supplement with AISStream if available and digitraffic returned few
     const apiKey = Deno.env.get('AISSTREAM_API_KEY') || '';
-    if (apiKey) {
-      console.log('[AIS] Fetching from AISStream...');
-      vessels = await fetchFromAISStream(apiKey);
-      console.log(`[AIS] AISStream returned ${vessels.length} vessels`);
-    }
-
-    // 2. If AISStream failed or returned too few, supplement with public APIs
-    if (vessels.length < 50) {
-      console.log('[AIS] Supplementing with public APIs...');
-      const publicVessels = await fetchFromPublicAPIs();
-      console.log(`[AIS] Public APIs returned ${publicVessels.length} vessels`);
-      
-      // Merge, dedup by MMSI
+    if (apiKey && vessels.length < 100) {
+      const aisVessels = await fetchFromAISStream(apiKey);
+      console.log(`[AIS] AISStream: ${aisVessels.length} vessels`);
       const vesselMap = new Map<string, VesselReport>();
       for (const v of vessels) vesselMap.set(v.mmsi, v);
-      for (const v of publicVessels) {
-        if (!vesselMap.has(v.mmsi)) vesselMap.set(v.mmsi, v);
-      }
+      for (const v of aisVessels) { if (!vesselMap.has(v.mmsi)) vesselMap.set(v.mmsi, v); }
       vessels = Array.from(vesselMap.values());
     }
 
@@ -266,15 +265,11 @@ async function getVessels(): Promise<VesselReport[]> {
     return vessels.length > 0 ? vessels : cachedVessels;
   })();
 
-  try {
-    const result = await inFlightFetch;
-    return result;
-  } finally {
-    inFlightFetch = null;
-  }
+  try { return await inFlightFetch; }
+  finally { inFlightFetch = null; }
 }
 
-// ---- Analytics from real vessel data ----
+// ---- Analytics ----
 
 function computeDensityFromVessels(vessels: VesselReport[]): DensityZone[] {
   return CHOKEPOINTS.map((cp) => {
@@ -282,36 +277,25 @@ function computeDensityFromVessels(vessels: VesselReport[]): DensityZone[] {
       Math.abs(v.lat - cp.lat) < cp.radius && Math.abs(v.lon - cp.lon) < cp.radius
     );
     const count = nearby.length;
-
-    // Intensity as ratio of observed vs baseline (0-1 scale, can exceed 1)
-    const intensity = count > 0 ? Math.min(1, count / Math.max(1, cp.baseShips * 0.15)) : 0;
-    // Delta from baseline extrapolated to daily rate
-    const estimatedDaily = count > 0 ? Math.round(count * (1440 / 5)) : cp.baseShips; // extrapolate 5-min snapshot
+    const intensity = count > 0 ? Math.min(1, count / Math.max(1, cp.baseShips * 0.1)) : 0;
+    const estimatedDaily = count > 0 ? Math.round(count * 24) : cp.baseShips;
     const deltaPct = count > 0
       ? Math.round(((estimatedDaily - cp.baseShips) / Math.max(1, cp.baseShips)) * 100)
       : 0;
 
     return {
-      id: cp.id,
-      name: cp.name,
-      lat: cp.lat,
-      lon: cp.lon,
+      id: cp.id, name: cp.name, lat: cp.lat, lon: cp.lon,
       intensity: Math.round(intensity * 100) / 100,
-      deltaPct,
-      shipsPerDay: count > 0 ? estimatedDaily : cp.baseShips,
-      note: cp.note,
-      vesselCount: count,
+      deltaPct, shipsPerDay: count > 0 ? estimatedDaily : cp.baseShips,
+      note: cp.note, vesselCount: count,
     };
   });
 }
 
-function computeDisruptionsFromDensity(density: DensityZone[], vessels: VesselReport[]): Disruption[] {
+function computeDisruptions(density: DensityZone[], vessels: VesselReport[]): Disruption[] {
   const disruptions: Disruption[] = [];
-  
   for (const zone of density) {
-    if (zone.vesselCount === 0) continue;
-    if (Math.abs(zone.deltaPct) < 20) continue;
-    
+    if (zone.vesselCount === 0 || Math.abs(zone.deltaPct) < 20) continue;
     const cp = CHOKEPOINTS.find(c => c.id === zone.id);
     if (!cp) continue;
 
@@ -319,24 +303,19 @@ function computeDisruptionsFromDensity(density: DensityZone[], vessels: VesselRe
     const severity: 'low' | 'elevated' | 'high' =
       Math.abs(zone.deltaPct) > 50 ? 'high' : Math.abs(zone.deltaPct) > 30 ? 'elevated' : 'low';
 
-    // Count dark ships (speed 0, heading 511 = not available)
     const nearbyVessels = vessels.filter(v =>
       Math.abs(v.lat - cp.lat) < cp.radius && Math.abs(v.lon - cp.lon) < cp.radius
     );
-    const darkCount = nearbyVessels.filter(v => v.speed === 0 && v.heading === 511).length;
+    const darkCount = nearbyVessels.filter(v => v.speed === 0 && (v.heading === 511 || v.heading === 0)).length;
 
     disruptions.push({
       id: `${zone.id}-${Date.now()}`,
       name: zone.name,
       type: isGapSpike ? 'gap_spike' : 'chokepoint_congestion',
-      lat: cp.lat,
-      lon: cp.lon,
-      severity,
-      changePct: zone.deltaPct,
-      windowHours: 24,
-      darkShips: darkCount || (isGapSpike ? Math.abs(Math.floor(zone.deltaPct / 10)) : 0),
-      vesselCount: zone.vesselCount,
-      region: cp.region,
+      lat: cp.lat, lon: cp.lon, severity,
+      changePct: zone.deltaPct, windowHours: 24,
+      darkShips: darkCount,
+      vesselCount: zone.vesselCount, region: cp.region,
       description: isGapSpike
         ? `Traffic drop near ${zone.name}: ${Math.abs(zone.deltaPct)}% below baseline`
         : `Traffic surge at ${zone.name}: +${zone.deltaPct}% above baseline`,
@@ -345,7 +324,6 @@ function computeDisruptionsFromDensity(density: DensityZone[], vessels: VesselRe
   return disruptions;
 }
 
-// ---- Ship type classification ----
 function classifyShipType(typeCode: number): string {
   if (typeCode >= 70 && typeCode <= 79) return 'cargo';
   if (typeCode >= 80 && typeCode <= 89) return 'tanker';
@@ -361,26 +339,20 @@ function computeVesselStats(vessels: VesselReport[]) {
   const byFlag: Record<string, number> = {};
   let movingCount = 0;
   let anchoredCount = 0;
-  
+
   for (const v of vessels) {
     const type = classifyShipType(v.shipType);
     byType[type] = (byType[type] || 0) + 1;
     if (v.flag) byFlag[v.flag] = (byFlag[v.flag] || 0) + 1;
-    if (v.speed > 0.5) movingCount++;
-    else anchoredCount++;
+    if (v.speed > 0.5) movingCount++; else anchoredCount++;
   }
 
   return {
     total: vessels.length,
     moving: movingCount,
     anchored: anchoredCount,
-    byType: Object.entries(byType)
-      .sort((a, b) => b[1] - a[1])
-      .map(([type, count]) => ({ type, count })),
-    topFlags: Object.entries(byFlag)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 15)
-      .map(([flag, count]) => ({ flag, count })),
+    byType: Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => ({ type, count })),
+    topFlags: Object.entries(byFlag).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([flag, count]) => ({ flag, count })),
   };
 }
 
@@ -398,11 +370,9 @@ Deno.serve(async (req) => {
     const vessels = await getVessels();
     const isLive = vessels.length > 0;
     const density = computeDensityFromVessels(vessels);
-    const disruptions = computeDisruptionsFromDensity(density, vessels);
+    const disruptions = computeDisruptions(density, vessels);
     const stats = computeVesselStats(vessels);
-
-    // Return top vessels by region for map rendering (cap at 5000)
-    const candidateReports = includeCandidates ? vessels.slice(0, 5000) : [];
+    const candidateReports = includeCandidates ? vessels.slice(0, 8000) : [];
 
     const snapshot = {
       sequence: Math.floor(Date.now() / 1000),
@@ -423,11 +393,8 @@ Deno.serve(async (req) => {
       headers: {
         ...corsHeaders,
         'Content-Type': 'application/json',
-        'Cache-Control': isLive
-          ? 'public, max-age=30, s-maxage=60'
-          : 'public, max-age=60, s-maxage=300',
+        'Cache-Control': isLive ? 'public, max-age=30, s-maxage=60' : 'public, max-age=60, s-maxage=300',
       },
-      status: 200,
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: 'Snapshot generation failed', detail: String(err) }), {
