@@ -4264,7 +4264,7 @@ export class DeckGLMap {
           <label class="layer-toggle${isLocked ? ' layer-toggle-locked' : ''}" data-layer="${key}">
             <input type="checkbox" ${this.state.layers[key as keyof MapLayers] ? 'checked' : ''}${isLocked ? ' disabled' : ''}>
             <span class="toggle-icon">${icon}</span>
-            <span class="toggle-label">${label}${isLocked ? ' \uD83D\uDD12' : ''}${isEnhanced ? ' <span class="layer-pro-badge">PRO</span>' : ''}</span>
+            <span class="toggle-label">${label}${isLocked ? ' \uD83D\uDD12' : ''}</span>
           </label>`;
         }).join('')}
       </div>
