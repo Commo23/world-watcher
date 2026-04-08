@@ -214,56 +214,6 @@ function computeDisruptionsFromDensity(density: DensityZone[]): Disruption[] {
   return disruptions;
 }
 
-// ---- Simulated fallback (when no API key) ----
-
-function seededRandom(seed: number, index: number): number {
-  const x = Math.sin(seed * 9301 + index * 49297 + 233280) * 49297;
-  return x - Math.floor(x);
-}
-
-function generateSimulatedSnapshot(includeCandidates: boolean) {
-  const seed = (() => { const d = new Date(); return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate(); })();
-  const hourFrac = new Date().getUTCHours() / 24;
-
-  const density: DensityZone[] = CHOKEPOINTS.map((cp, i) => {
-    const r = seededRandom(seed, i);
-    const hourJitter = seededRandom(seed + Math.floor(hourFrac * 6), i + 100);
-    const delta = Math.round((r - 0.5) * 40 + (hourJitter - 0.5) * 15);
-    const ships = Math.round(cp.baseShips * (1 + delta / 100));
-    const intensity = Math.min(1, Math.max(0, ships / 120));
-    return { id: cp.id, name: cp.name, lat: cp.lat, lon: cp.lon, intensity: Math.round(intensity * 100) / 100, deltaPct: delta, shipsPerDay: ships, note: cp.note };
-  });
-
-  const disruptionCount = 2 + Math.floor(seededRandom(seed, 999) * 3);
-  const disruptions: Disruption[] = [];
-  const usedIndices = new Set<number>();
-  for (let d = 0; d < disruptionCount; d++) {
-    let idx = Math.floor(seededRandom(seed, 500 + d) * CHOKEPOINTS.length);
-    while (usedIndices.has(idx)) idx = (idx + 1) % CHOKEPOINTS.length;
-    usedIndices.add(idx);
-    const cp = CHOKEPOINTS[idx];
-    const isGapSpike = seededRandom(seed, 600 + d) < 0.5;
-    const severityR = seededRandom(seed, 700 + d);
-    const severity: 'low' | 'elevated' | 'high' = severityR < 0.5 ? 'low' : severityR < 0.85 ? 'elevated' : 'high';
-    const changePct = Math.round((seededRandom(seed, 800 + d) * 60 + 10) * (isGapSpike ? 1 : -1));
-    disruptions.push({
-      id: `${cp.id}-${seed}-${d}`, name: cp.name,
-      type: isGapSpike ? 'gap_spike' : 'chokepoint_congestion',
-      lat: cp.lat + (seededRandom(seed, 900 + d) - 0.5) * 0.5,
-      lon: cp.lon + (seededRandom(seed, 1000 + d) - 0.5) * 0.5,
-      severity, changePct,
-      windowHours: [6, 12, 24][Math.floor(seededRandom(seed, 1100 + d) * 3)],
-      darkShips: isGapSpike ? Math.floor(seededRandom(seed, 1200 + d) * 15) + 1 : 0,
-      vesselCount: Math.floor(seededRandom(seed, 1300 + d) * 200) + 20,
-      region: cp.region,
-      description: isGapSpike
-        ? `AIS gap spike near ${cp.name}`
-        : `Traffic congestion at ${cp.name}: ${Math.abs(changePct)}% change`,
-    });
-  }
-
-  return { density, disruptions, candidateReports: [] as VesselReport[] };
-}
 
 // ============================================================================
 
@@ -275,40 +225,13 @@ Deno.serve(async (req) => {
   try {
     const url = new URL(req.url);
     const includeCandidates = url.searchParams.get('candidates') === 'true';
-    const apiKey = Deno.env.get('AISSTREAM_API_KEY') || '';
-
-    let density: DensityZone[];
-    let disruptions: Disruption[];
-    let candidateReports: VesselReport[] = [];
-    let vesselCount = 0;
-    let isLive = false;
-
-    if (apiKey) {
-      // Real AIS data from AISStream
-      const vessels = await getVessels();
-      isLive = vessels.length > 0;
-
-      if (isLive) {
-        density = computeDensityFromVessels(vessels);
-        disruptions = computeDisruptionsFromDensity(density);
-        candidateReports = includeCandidates ? vessels : [];
-        vesselCount = vessels.length;
-      } else {
-        // API key set but no data yet — use simulated fallback
-        const sim = generateSimulatedSnapshot(includeCandidates);
-        density = sim.density;
-        disruptions = sim.disruptions;
-        candidateReports = sim.candidateReports;
-        vesselCount = density.reduce((s, z) => s + z.shipsPerDay, 0);
-      }
-    } else {
-      // No API key — fully simulated
-      const sim = generateSimulatedSnapshot(includeCandidates);
-      density = sim.density;
-      disruptions = sim.disruptions;
-      candidateReports = sim.candidateReports;
-      vesselCount = density.reduce((s, z) => s + z.shipsPerDay, 0);
-    }
+    // Fetch real AIS data (returns empty if no API key)
+    const vessels = await getVessels();
+    const isLive = vessels.length > 0;
+    const density = computeDensityFromVessels(vessels);
+    const disruptions = computeDisruptionsFromDensity(density);
+    const candidateReports = includeCandidates ? vessels : [];
+    const vesselCount = vessels.length;
 
     const snapshot = {
       sequence: Math.floor(Date.now() / 60000),
